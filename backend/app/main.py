@@ -1,12 +1,16 @@
 from fastapi import FastAPI
+from app.core.config import settings
+
 
 app=FastAPI(
-    title="InterviAI",
-    version="1.0.0",
-    description="An AI-powered platform for interview preparation and practice."
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION
 )
 
 
 @app.get("/")
 def wlcm():
-    return {"message":"hello world"}
+    return {"message":f"Welcome to {settings.APP_NAME}",
+            "version": settings.APP_VERSION,
+            "debug": settings.DEBUG,
+    }
