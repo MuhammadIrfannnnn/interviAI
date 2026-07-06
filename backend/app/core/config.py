@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     DEBUG: bool
     API_PREFIX: str
     DATABASE_URL: str
+    SECRET_KEY: str
+    ALGORITHM: str
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
