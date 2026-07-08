@@ -7,6 +7,7 @@ from app.models.resume import Resume
 from sqlalchemy.orm import Session
 from fastapi import UploadFile, HTTPException
 from app.utils.pdf import extract_text_from_pdf
+from app.utils.text import clean_resume_text
 UPLOAD_DIR = Path("uploads/resumes")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -21,6 +22,7 @@ def upload_resume(file: UploadFile, current_user: User, db: Session) -> Resume:
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     text = extract_text_from_pdf(file_path=str(file_path))
+    text=clean_resume_text(text)
     resume = Resume(
         user_id=current_user.id,
         file_name=file.filename,
