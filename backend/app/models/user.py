@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy import String,DateTime
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column,relationship
 from app.database.base import Base
 
 class User(Base):
@@ -13,3 +13,4 @@ class User(Base):
     role:Mapped[str]=mapped_column(String(50),default="candidate")
     created_at:Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at:Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    resume=relationship("Resume", back_populates="user", uselist=False)
