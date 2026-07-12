@@ -13,5 +13,7 @@ class Resume(Base):
     extracted_text:Mapped[str]=mapped_column(Text)
     uploaded_at:Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
     user=relationship("User", back_populates="resume")
+    parsed_resume =relationship("ParsedResume",back_populates="resume",uselist=False,cascade="all, delete-orphan")
+    interview_sessions=relationship("InterviewSession",back_populates="resume")
 
 

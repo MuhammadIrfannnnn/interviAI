@@ -14,3 +14,4 @@ class User(Base):
     created_at:Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at:Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     resume=relationship("Resume", back_populates="user", uselist=False)
+    interview_sessions=relationship("InterviewSession",back_populates="user")
