@@ -1,6 +1,7 @@
 from app.schemas.resume import ParsedResume
 from google import genai
 from app.core.config import settings
+from app.schemas.interview_evaluation import InterviewEvaluation
 import json
 
 client=genai.Client(api_key=settings.GEMINI_API_KEY)
@@ -97,11 +98,78 @@ Instructions:
 
     return response.text.strip()
     
-def generate_next_question(parsed_resume:ParsedResume,role_applied:str,difficulty:str,conversation:str):
+def generate_next_question(parsed_resume:ParsedResume,role_applied:str,difficulty:str,conversation:str,evaluation:InterviewEvaluation):
     prompt = f"""
-You are an experienced technical interviewer.
+You are a senior technical interviewer.
 
-Your goal is to conduct a realistic interview.
+Candidate Resume
+
+Name:
+{parsed_resume.name}
+
+Skills:
+{parsed_resume.skills}
+
+Projects:
+{parsed_resume.projects}
+
+Conversation
+
+{conversation}
+
+Latest Evaluation
+
+Technical Score:
+{evaluation.technical_score}
+
+Communication Score:
+{evaluation.communication_score}
+
+Confidence Score:
+{evaluation.confidence_score}
+
+Correctness:
+{evaluation.correctness}
+
+Strengths:
+{evaluation.strengths}
+
+Weaknesses:
+{evaluation.weaknesses}
+
+Follow-up Strategy:
+{evaluation.follow_up_strategy}
+
+Role:
+{role_applied}
+
+Difficulty:
+{difficulty}
+
+Instructions
+
+- Ask ONLY ONE question.
+- Adapt based on the evaluation.
+- If the answer lacked depth, ask a deeper follow-up.
+- If the answer was incorrect, guide the candidate toward the concept.
+- If the answer was excellent, increase difficulty.
+- Never repeat previous questions.
+- Return ONLY the next interview question.
+"""
+    response=client.models.generate_content(
+        model=MODEL,
+        contents=prompt,
+    )
+    if not response.text:
+        raise ValueError("Gemini returned an empty response")
+
+    return response.text.strip()
+
+def evaluate_answer(parsed_resume:ParsedResume,role_applied:str,difficulty:str,conversation:str,candidate_answer:str):
+    prompt = f"""
+You are a senior technical interviewer.
+
+Evaluate ONLY the candidate's MOST RECENT answer.
 
 Candidate Resume
 
@@ -117,36 +185,79 @@ Projects:
 Experience:
 {parsed_resume.experience}
 
-Education:
-{parsed_resume.education}
+Conversation So Far:
 
-Role Applied:
+{conversation}
+
+Latest Candidate Answer:
+
+{candidate_answer}
+
+Role:
 {role_applied}
 
 Difficulty:
 {difficulty}
 
-Conversation So Far:
+Return ONLY valid JSON.
 
-{conversation}
+Do NOT include markdown.
 
-Instructions:
+Do NOT include triple backticks.
 
-- Read the entire conversation carefully.
-- Never repeat previous questions.
-- Ask only ONE question.
-- If the candidate answered well, ask a deeper follow-up.
-- If the answer was weak, ask an easier clarifying question.
-- Use information from the resume whenever possible.
-- Behave like a real interviewer, not a scripted chatbot.
-- Return ONLY the next interview question.
+Return:
+
+{{
+    "technical_score": integer from 0-10,
+    "communication_score": integer from 0-10,
+    "confidence_score": integer from 0-10,
+    "correctness":"Correct / Partially Correct / Incorrect",
+    "strengths":[...],
+    "weaknesses":[...],
+    "feedback":"short paragraph",
+    "follow_up_strategy":"What should interviewer ask next"
+}}
+Scoring Guidelines:
+
+Technical Score (0-10)
+
+0-2 = Completely wrong
+
+3-4 = Very weak understanding
+
+5-6 = Basic understanding
+
+7-8 = Good technical explanation
+
+9-10 = Expert-level explanation
+
+Communication Score
+
+Evaluate clarity, organization and explanation.
+
+Confidence Score
+
+Estimate confidence based ONLY on the wording of the answer.
+Do NOT assume confidence from resume.
 """
     response=client.models.generate_content(
         model=MODEL,
         contents=prompt,
     )
-    if not response.text:
-        raise ValueError("Gemini returned an empty response")
+    print("Gemini Response")
+    print(response.text)
+    print("------------------------------------------------------------")
+    response_text=response.text.strip()
+    if response_text.startswith("```json"):
+        response_text=response_text.replace("```json","",1)
+    if response_text.endswith("```"):
+        response_text=response_text[:-3]
+    response_text=response_text.strip()
+    try:
+        data = json.loads(response_text)
+        return InterviewEvaluation(**data)
 
-    return response.text.strip()
-
+    except json.JSONDecodeError:
+        print(response_text)
+        raise ValueError("Gemini did not return valid JSON")
+    
