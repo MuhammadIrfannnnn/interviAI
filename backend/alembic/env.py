@@ -11,6 +11,7 @@ from app.models.resume import Resume
 from app.models.parsed_resume import ParsedResume
 from app.models.interview_session import InterviewSession
 from app.models.interview_message import InterviewMessage
+from app.models.interview_evaluation import InterviewEvaluation
 from app.core.config import settings
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

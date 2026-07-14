@@ -12,3 +12,9 @@ class InterviewMessage(Base):
     message:Mapped[str]=mapped_column(Text)
     created_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow)
     session=relationship("InterviewSession",back_populates="messages")
+    
+    evaluation = relationship(
+        "InterviewEvaluation",
+        back_populates="message",
+        uselist=False,
+    )

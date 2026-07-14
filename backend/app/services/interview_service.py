@@ -8,6 +8,7 @@ from app.services.ai_service import generate_first_question,generate_next_questi
 from fastapi import HTTPException
 from app.schemas.interview import InterviewStart
 from app.schemas.interview_message import InterviewAnswer
+from app.models.interview_evaluation import InterviewEvaluation
 
 def start_interview(db:Session,current_user:User,interview:InterviewStart):
     resume=(db.query(Resume).filter(Resume.user_id==current_user.id).first())
@@ -58,6 +59,19 @@ def continue_interview(db:Session,current_user:User,interview:InterviewAnswer):
     for message in messages:
         conversation+=f"{message.speaker}:{message.message}\n"
     evaluation=evaluate_answer(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,candidate_answer=interview.answer)
+    evaluation_db = InterviewEvaluation(
+    message_id=candidate_message.id,
+    technical_score=evaluation.technical_score,
+    communication_score=evaluation.communication_score,
+    confidence_score=evaluation.confidence_score,
+    correctness=evaluation.correctness,
+    strengths=evaluation.strengths,
+    weaknesses=evaluation.weaknesses,
+    feedback=evaluation.feedback,
+    )
+    db.add(evaluation_db)
+    db.commit()
+    db.refresh(evaluation_db)
     next_question=generate_next_question(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,evaluation=evaluation)
     ai_message=InterviewMessage(session_id=session.id,speaker="AI",message=next_question)
     db.add(ai_message)

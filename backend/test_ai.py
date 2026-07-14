@@ -1,18 +1,24 @@
-from app.services.ai_service import parse_resume
+# from app.services.ai_service import parse_resume
 
-text = """
-Muhammad
+# text = """
+# Muhammad
 
-Skills:
-Python
-FastAPI
-Docker
+# Skills:
+# Python
+# FastAPI
+# Docker
 
-Projects:
-InterviAI
+# Projects:
+# InterviAI
 
-Education:
-BS Computer Science
-"""
+# Education:
+# BS Computer Science
+# """
 
-print(parse_resume(text))
+# print(parse_resume(text))
+from google import genai
+
+client = genai.Client(api_key="AIzaSyDewB7YaiNL9nz20IVB2veU0hhiSyEPR2E")
+
+for model in client.models.list():
+    print(model.name)
