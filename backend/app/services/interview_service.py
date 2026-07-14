@@ -4,7 +4,7 @@ from app.models.resume import Resume
 from app.models.parsed_resume import ParsedResume as ParsedResumeModel
 from app.models.interview_session import InterviewSession
 from app.models.interview_message import InterviewMessage
-from app.services.ai_service import generate_first_question,generate_next_question
+from app.services.ai_service import generate_first_question,generate_next_question,evaluate_answer
 from fastapi import HTTPException
 from app.schemas.interview import InterviewStart
 from app.schemas.interview_message import InterviewAnswer
@@ -57,12 +57,14 @@ def continue_interview(db:Session,current_user:User,interview:InterviewAnswer):
     conversation=""
     for message in messages:
         conversation+=f"{message.speaker}:{message.message}\n"
-    next_question=generate_next_question(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation)
+    evaluation=evaluate_answer(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,candidate_answer=interview.answer)
+    next_question=generate_next_question(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,evaluation=evaluation)
     ai_message=InterviewMessage(session_id=session.id,speaker="AI",message=next_question)
     db.add(ai_message)
     db.commit()
     db.refresh(ai_message)
     return {
     "session_id": session.id,
+    "evaluation":evaluation.model_dump(),
     "next_question": next_question
     }
