@@ -11,7 +11,7 @@ An AI-powered virtual interviewer that conducts realistic technical interviews t
 
 ### Backend
 - FastAPI
-- PostgreSQL
+- MySQL
 - SQLAlchemy
 
 ### AI
