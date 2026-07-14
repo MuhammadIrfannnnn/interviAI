@@ -2,8 +2,8 @@ from app.schemas.resume import ParsedResume
 from google import genai
 from app.core.config import settings
 from app.schemas.interview_evaluation import InterviewEvaluation
+from app.schemas.interview_decision import InterviewDecision
 import json
-
 client=genai.Client(api_key=settings.GEMINI_API_KEY)
 MODEL="gemini-2.5-flash"
 
@@ -261,3 +261,75 @@ Do NOT assume confidence from resume.
         print(response_text)
         raise ValueError("Gemini did not return valid JSON")
     
+def should_end_interview(parsed_resume:ParsedResume,role_applied:str,difficulty:str,conversation:str,evaluations:str):
+    prompt = f"""
+You are an experienced technical interviewer.
+
+Candidate Resume
+
+Skills:
+{parsed_resume.skills}
+
+Projects:
+{parsed_resume.projects}
+
+Experience:
+{parsed_resume.experience}
+
+Role Applied:
+{role_applied}
+
+Difficulty:
+{difficulty}
+
+Interview Conversation
+
+{conversation}
+
+Evaluations
+
+{evaluations}
+
+Your job is to decide whether the interview should continue.
+
+Guidelines
+
+- End the interview if enough technical depth has been explored.
+- End if approximately 6-10 meaningful questions have already been asked.
+- Continue if important topics remain unexplored.
+- Continue if candidate performance is still unclear.
+- Avoid repeating questions.
+
+Return ONLY valid JSON.
+
+Do NOT include markdown.
+
+Do NOT include triple backticks.
+
+{{
+    "end_interview": bool (True/False),
+    "reason": str (Candidate demonstrated sufficient technical depth.)
+}}
+"""
+    response=client.models.generate_content(
+        model=MODEL,
+        contents=prompt,
+    )
+    print("Gemini Response")
+    print(response.text)
+    print("------------------------------------------------------------")
+    response_text=response.text.strip()
+    if response_text.startswith("```json"):
+        response_text=response_text.replace("```json","",1)
+    if response_text.endswith("```"):
+        response_text=response_text[:-3]
+    response_text=response_text.strip()
+    try:
+        data = json.loads(response_text)
+        return InterviewDecision(**data)
+
+    except json.JSONDecodeError:
+        print(response_text)
+        raise ValueError("Gemini did not return valid JSON")
+    
+

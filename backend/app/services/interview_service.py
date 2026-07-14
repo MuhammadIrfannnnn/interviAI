@@ -4,7 +4,7 @@ from app.models.resume import Resume
 from app.models.parsed_resume import ParsedResume as ParsedResumeModel
 from app.models.interview_session import InterviewSession
 from app.models.interview_message import InterviewMessage
-from app.services.ai_service import generate_first_question,generate_next_question,evaluate_answer
+from app.services.ai_service import generate_first_question,generate_next_question,evaluate_answer,should_end_interview
 from fastapi import HTTPException
 from app.schemas.interview import InterviewStart
 from app.schemas.interview_message import InterviewAnswer
@@ -72,6 +72,30 @@ def continue_interview(db:Session,current_user:User,interview:InterviewAnswer):
     db.add(evaluation_db)
     db.commit()
     db.refresh(evaluation_db)
+    evaluations = (db.query(InterviewEvaluation).join(InterviewMessage).filter(InterviewMessage.session_id == session.id).all())
+    evaluation_summary = ""
+    for eval_record in evaluations:
+        evaluation_summary += f"""
+    Technical: {eval_record.technical_score}/10
+    Communication: {eval_record.communication_score}/10
+    Confidence: {eval_record.confidence_score}/10
+    Correctness: {eval_record.correctness}
+    Strengths:
+    {", ".join(eval_record.strengths)}
+    Weaknesses:
+    {", ".join(eval_record.weaknesses)}
+    Feedback: {eval_record.feedback}
+    """
+    decision = should_end_interview(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,evaluations=evaluation_summary)
+    if decision.end_interview:
+        session.status="completed"
+        db.commit()
+        return {
+        "message": "Interview completed successfully",
+        "session_id": session.id,
+        "reason": decision.reason,
+        "evaluation": evaluation.model_dump()
+        }
     next_question=generate_next_question(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,evaluation=evaluation)
     ai_message=InterviewMessage(session_id=session.id,speaker="AI",message=next_question)
     db.add(ai_message)
