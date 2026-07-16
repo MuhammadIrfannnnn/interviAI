@@ -3,6 +3,8 @@ from google import genai
 from app.core.config import settings
 from app.schemas.interview_evaluation import InterviewEvaluation
 from app.schemas.interview_decision import InterviewDecision
+from app.schemas.interview_plan import InterviewPlan
+from app.schemas.interview_state import InterviewState
 import json
 client=genai.Client(api_key=settings.GEMINI_API_KEY)
 MODEL="gemini-2.5-flash"
@@ -98,11 +100,25 @@ Instructions:
 
     return response.text.strip()
     
-def generate_next_question(parsed_resume:ParsedResume,role_applied:str,difficulty:str,conversation:str,evaluation:InterviewEvaluation):
+def generate_next_question(parsed_resume:ParsedResume,role_applied:str,difficulty:str,conversation:str,evaluation:InterviewEvaluation,plan:InterviewPlan):
     prompt = f"""
-You are a senior technical interviewer.
+You are an experienced interviewer.
 
-Candidate Resume
+IMPORTANT:
+
+The interview planning has ALREADY been completed.
+
+You MUST follow the planner's decision.
+
+Do NOT decide what competency to assess next.
+
+Do NOT change topics unless instructed by the planner.
+
+Your ONLY responsibility is writing the next interview question.
+
+------------------------------------------------------------
+CANDIDATE INFORMATION
+------------------------------------------------------------
 
 Name:
 {parsed_resume.name}
@@ -113,48 +129,91 @@ Skills:
 Projects:
 {parsed_resume.projects}
 
-Conversation
+Experience:
+{parsed_resume.experience}
 
-{conversation}
+Education:
+{parsed_resume.education}
 
-Latest Evaluation
-
-Technical Score:
-{evaluation.technical_score}
-
-Communication Score:
-{evaluation.communication_score}
-
-Confidence Score:
-{evaluation.confidence_score}
-
-Correctness:
-{evaluation.correctness}
-
-Strengths:
-{evaluation.strengths}
-
-Weaknesses:
-{evaluation.weaknesses}
-
-Follow-up Strategy:
-{evaluation.follow_up_strategy}
-
-Role:
+Role Applied:
 {role_applied}
 
 Difficulty:
 {difficulty}
 
-Instructions
+------------------------------------------------------------
+PLANNER DECISION
+------------------------------------------------------------
 
-- Ask ONLY ONE question.
-- Adapt based on the evaluation.
-- If the answer lacked depth, ask a deeper follow-up.
-- If the answer was incorrect, guide the candidate toward the concept.
-- If the answer was excellent, increase difficulty.
-- Never repeat previous questions.
-- Return ONLY the next interview question.
+{plan.model_dump_json(indent=2)}
+
+------------------------------------------------------------
+LATEST EVALUATION
+------------------------------------------------------------
+
+{evaluation.model_dump_json(indent=2)}
+
+------------------------------------------------------------
+INTERVIEW CONVERSATION
+------------------------------------------------------------
+
+{conversation}
+
+------------------------------------------------------------
+QUESTION WRITING RULES
+------------------------------------------------------------
+
+1. Ask EXACTLY ONE interview question.
+
+2. Follow the planner decision exactly.
+
+3. Follow the planner guidance.
+
+4. Never ignore the planner.
+
+5. If the planner selected "continue_topic",
+ask a meaningful follow-up that explores the topic further.
+
+6. If the planner selected "switch_topic",
+transition naturally before asking the next question.
+
+7. If the planner selected "increase_difficulty",
+make the next question noticeably more challenging.
+
+8. If the planner selected "decrease_difficulty",
+simplify the next question without sounding patronizing.
+
+9. Do NOT ask multiple questions.
+
+10. Do NOT repeat previous questions.
+
+11. Sound like an experienced human interviewer.
+
+12. The interview should feel conversational rather than scripted.
+
+13. If changing competency, use a smooth transition such as:
+
+"Let's switch gears slightly..."
+
+or
+
+"I'd like to move to another area..."
+
+14. Use the candidate's resume whenever appropriate to personalize the question.
+
+15. Avoid long questions.
+
+16. Do NOT explain your reasoning.
+
+17. Return ONLY the interview question.
+
+No markdown.
+
+No code fences.
+
+No explanations.
+
+Return ONLY the question.
 """
     response=client.models.generate_content(
         model=MODEL,
@@ -331,5 +390,279 @@ Do NOT include triple backticks.
     except json.JSONDecodeError:
         print(response_text)
         raise ValueError("Gemini did not return valid JSON")
+    
+
+def plan_next_step(parsed_resume:ParsedResume,role_applied:str,difficulty:str,conversation:str,evaluations:str,state:InterviewState):
+    prompt = f"""
+You are an expert senior hiring manager responsible for PLANNING an interview.
+
+IMPORTANT:
+You are NOT the interviewer.
+You NEVER ask interview questions.
+You NEVER answer interview questions.
+
+Your ONLY responsibility is deciding what the interviewer should do next.
+
+------------------------------------------------------------
+CANDIDATE INFORMATION
+------------------------------------------------------------
+
+Name:
+{parsed_resume.name}
+
+Skills:
+{parsed_resume.skills}
+
+Projects:
+{parsed_resume.projects}
+
+Experience:
+{parsed_resume.experience}
+
+Education:
+{parsed_resume.education}
+
+Role Applied:
+{role_applied}
+
+Difficulty:
+{difficulty}
+
+------------------------------------------------------------
+INTERVIEW CONVERSATION
+------------------------------------------------------------
+
+{conversation}
+
+------------------------------------------------------------
+EVALUATION HISTORY
+------------------------------------------------------------
+
+{evaluations}
+
+------------------------------------------------------------
+CURRENT INTERVIEW STATE
+------------------------------------------------------------
+
+{state.model_dump_json(indent=2)}
+
+------------------------------------------------------------
+YOUR OBJECTIVE
+------------------------------------------------------------
+
+Plan the remainder of the interview exactly as an experienced human interviewer would.
+
+Your goal is NOT to test only technical knowledge.
+
+Your goal is to collect enough evidence to evaluate the candidate across multiple dimensions before deciding whether to hire them.
+
+------------------------------------------------------------
+COMPETENCIES TO ASSESS
+------------------------------------------------------------
+
+Assess as many of these as appropriate for the candidate level.
+
+- Introduction
+- Resume Discussion
+- Projects
+- Technical Knowledge
+- Problem Solving
+- System Design (only if appropriate)
+- Behavioral
+- Communication
+- Teamwork
+- Leadership
+- Motivation
+- Career Goals
+
+------------------------------------------------------------
+PLANNING RULES
+------------------------------------------------------------
+
+1. Use Interview State as the PRIMARY source of truth.
+
+2. Use Conversation only for additional context.
+
+3. Use Evaluation History to understand strengths and weaknesses.
+
+4. Prefer discussing projects, experience and skills that actually exist in the candidate's resume.
+
+5. Never repeatedly ask about the same topic if it has already been sufficiently assessed.
+
+6. Normally ask at most 2-3 questions for a competency.
+
+7. If the candidate demonstrates STRONG understanding of a competency,
+move to another competency.
+
+8. If the candidate struggles after multiple attempts,
+stop insisting and move to another competency.
+
+9. Avoid making the interview feel repetitive.
+
+10. Mix technical and non-technical questions naturally.
+
+11. Ask behavioral questions naturally instead of treating them as a separate section.
+
+12. Only include System Design questions when the candidate level and role justify them.
+
+13. Adapt the interview according to:
+- Resume
+- Candidate performance
+- Difficulty
+- Role
+
+14. The interview should feel conversational, not like a scripted checklist.
+
+15. It is acceptable to revisit a previous competency later if new evidence is needed.
+
+16. End the interview ONLY after enough evidence has been collected across multiple competencies.
+
+17. Never end the interview after evaluating only one area.
+
+18. If the interview is already well balanced and sufficient evidence exists, choose "end_interview".
+
+------------------------------------------------------------
+AVAILABLE ACTIONS
+------------------------------------------------------------
+
+continue_topic
+switch_topic
+increase_difficulty
+decrease_difficulty
+end_interview
+
+------------------------------------------------------------
+AVAILABLE COMPETENCIES
+------------------------------------------------------------
+
+Introduction
+
+Resume
+
+Projects
+
+Technical
+
+Problem Solving
+
+System Design
+
+Behavioral
+
+Communication
+
+Teamwork
+
+Leadership
+
+Motivation
+
+Career Goals
+
+------------------------------------------------------------
+OUTPUT FORMAT
+------------------------------------------------------------
+
+Return ONLY valid JSON matching the InterviewPlan schema.
+
+Example:
+
+{{
+    "action": "switch_topic",
+    "next_competency": "Behavioral",
+    "topic": "Conflict Resolution",
+    "reason": "Technical competency has been sufficiently assessed and behavioral evidence is still missing.",
+    "guidance": "Ask a situational behavioral question about resolving disagreements within a team.",
+    "transition": "Let's move away from technical implementation and talk about teamwork."
+}}
+
+Do NOT return markdown.
+
+Do NOT return explanations.
+
+Do NOT return code fences.
+
+Return ONLY the JSON object.
+"""
+    response=client.models.generate_content(
+        model=MODEL,
+        contents=prompt,
+    )
+    print("Gemini Response")
+    print(response.text)
+    print("------------------------------------------------------------")
+    response_text=response.text.strip()
+    if response_text.startswith("```json"):
+        response_text=response_text.replace("```json","",1)
+    if response_text.endswith("```"):
+        response_text=response_text[:-3]
+    response_text=response_text.strip()
+    try:
+        data = json.loads(response_text)
+        return InterviewPlan(**data)
+
+    except json.JSONDecodeError:
+        print(response_text)
+        raise ValueError("Gemini did not return valid JSON")
+    
+def update_interview_state(state:InterviewState,evaluation:str,conversation:str)->InterviewState:
+    prompt=f"""
+You are responsible for maintaining the interview state.
+
+You are NOT the interviewer.
+
+Current Interview State:
+
+{state.model_dump_json(indent=2)}
+
+Latest Evaluation:
+
+{evaluation}
+
+Conversation:
+
+{conversation}
+
+Update ONLY the interview state.
+
+Rules:
+
+- Increase attempts for the competency discussed.
+- Update level:
+    - Strong
+    - Average
+    - Weak
+- Mark covered=True once assessed.
+- Update last_topic.
+- Do NOT invent new competencies.
+- Keep unrelated competencies unchanged.
+
+Return ONLY valid JSON matching the InterviewState schema.
+"""
+    response=client.models.generate_content(
+        model=MODEL,
+        contents=prompt,
+    )
+    print("Gemini Response")
+    print(response.text)
+    print("------------------------------------------------------------")
+    response_text=response.text.strip()
+    if response_text.startswith("```json"):
+        response_text=response_text.replace("```json","",1)
+    if response_text.endswith("```"):
+        response_text=response_text[:-3]
+    response_text=response_text.strip()
+    try:
+        data = json.loads(response_text)
+        return InterviewState(**data)
+
+    except json.JSONDecodeError:
+        print(response_text)
+        raise ValueError("Gemini did not return valid JSON")
+
+
+
+        
+
     
 

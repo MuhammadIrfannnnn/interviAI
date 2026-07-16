@@ -4,11 +4,13 @@ from app.models.resume import Resume
 from app.models.parsed_resume import ParsedResume as ParsedResumeModel
 from app.models.interview_session import InterviewSession
 from app.models.interview_message import InterviewMessage
-from app.services.ai_service import generate_first_question,generate_next_question,evaluate_answer,should_end_interview
+from app.services.ai_service import generate_first_question,generate_next_question,evaluate_answer,plan_next_step,update_interview_state
 from fastapi import HTTPException
 from app.schemas.interview import InterviewStart
 from app.schemas.interview_message import InterviewAnswer
 from app.models.interview_evaluation import InterviewEvaluation
+from app.schemas.interview_state import InterviewState
+from datetime import datetime
 
 def start_interview(db:Session,current_user:User,interview:InterviewStart):
     resume=(db.query(Resume).filter(Resume.user_id==current_user.id).first())
@@ -24,6 +26,8 @@ def start_interview(db:Session,current_user:User,interview:InterviewStart):
         difficulty=interview.difficulty,
         status="active"
     )  
+    state = InterviewState()
+    session.interview_state = state.model_dump()
     db.add(session)
     db.commit()
     db.refresh(session)
@@ -32,6 +36,7 @@ def start_interview(db:Session,current_user:User,interview:InterviewStart):
     message=InterviewMessage(session_id=session.id,speaker="AI",message=first_question)
     db.add(message)
     db.commit()
+    db.refresh(message)
     return {
     "message": "Interview started successfully",
     "session_id": session.id,
@@ -86,17 +91,34 @@ def continue_interview(db:Session,current_user:User,interview:InterviewAnswer):
     {", ".join(eval_record.weaknesses)}
     Feedback: {eval_record.feedback}
     """
-    decision = should_end_interview(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,evaluations=evaluation_summary)
-    if decision.end_interview:
-        session.status="completed"
+    state = InterviewState(**session.interview_state)
+    updated_state=update_interview_state(state=state,evaluation=evaluation_summary,conversation=conversation)
+    session.interview_state = updated_state.model_dump()
+    db.commit()
+    plan=plan_next_step(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,evaluations=evaluation_summary,state=updated_state)
+    if plan.action == "end_interview":
+        session.status = "completed"
+        session.ended_at = datetime.utcnow()
         db.commit()
+        db.refresh(session)
+    # generate final report
         return {
-        "message": "Interview completed successfully",
-        "session_id": session.id,
-        "reason": decision.reason,
-        "evaluation": evaluation.model_dump()
-        }
-    next_question=generate_next_question(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,evaluation=evaluation)
+             "message": "Interview completed successfully",
+             "session_id": session.id,
+             "reason":plan.reason
+             }
+    
+    # decision = should_end_interview(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,evaluations=evaluation_summary)
+    # if decision.end_interview:
+    #     session.status="completed"
+    #     db.commit()
+    #     return {
+    #     "message": "Interview completed successfully",
+    #     "session_id": session.id,
+    #     "reason": decision.reason,
+    #     "evaluation": evaluation.model_dump()
+    #     }
+    next_question=generate_next_question(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,evaluation=evaluation,plan=plan)
     ai_message=InterviewMessage(session_id=session.id,speaker="AI",message=next_question)
     db.add(ai_message)
     db.commit()
