@@ -6,8 +6,10 @@ from app.schemas.interview_decision import InterviewDecision
 from app.schemas.interview_plan import InterviewPlan
 from app.schemas.interview_state import InterviewState
 import json
+from backend.app.schemas.interview_report import InterviewReport
+
 client=genai.Client(api_key=settings.GEMINI_API_KEY)
-MODEL="gemini-2.5-flash"
+MODEL="gemini-3.5-flash"
 
 def parse_resume(text:str)->ParsedResume:
     prompt = f"""
@@ -659,10 +661,241 @@ Return ONLY valid JSON matching the InterviewState schema.
     except json.JSONDecodeError:
         print(response_text)
         raise ValueError("Gemini did not return valid JSON")
-
-
-
-        
-
     
+def generate_final_report(
+    parsed_resume: ParsedResume,
+    role_applied: str,
+    difficulty: str,
+    conversation: str,
+    evaluations: str,
+    state: InterviewState,
+):
+    prompt = f"""
+You are a Senior Engineering Hiring Manager.
 
+The interview has now concluded.
+
+Your task is NOT to ask another question.
+
+Your task is to produce the FINAL interview assessment.
+
+=========================================================
+CANDIDATE INFORMATION
+=========================================================
+
+Name:
+{parsed_resume.name}
+
+Skills:
+{parsed_resume.skills}
+
+Projects:
+{parsed_resume.projects}
+
+Experience:
+{parsed_resume.experience}
+
+Education:
+{parsed_resume.education}
+
+=========================================================
+INTERVIEW DETAILS
+=========================================================
+
+Role Applied:
+{role_applied}
+
+Difficulty:
+{difficulty}
+
+=========================================================
+FULL INTERVIEW CONVERSATION
+=========================================================
+
+{conversation}
+
+=========================================================
+ANSWER EVALUATIONS
+=========================================================
+
+{evaluations}
+
+=========================================================
+FINAL INTERVIEW STATE
+=========================================================
+
+{state.model_dump_json(indent=2)}
+
+=========================================================
+YOUR RESPONSIBILITIES
+=========================================================
+
+Evaluate the candidate based on the ENTIRE interview.
+
+Do NOT judge only the last answer.
+
+Use the resume, conversation, evaluations and interview state together.
+
+Think like a real senior engineering hiring manager.
+
+Your evaluation should be balanced, evidence-based and realistic.
+
+=========================================================
+SCORING
+=========================================================
+
+Provide scores between 0 and 10 for:
+
+- technical_score
+- communication_score
+- confidence_score
+- problem_solving_score
+
+Then calculate:
+
+overall_score
+
+The overall score should reflect the complete interview,
+not simply the average.
+
+=========================================================
+STRENGTHS
+=========================================================
+
+List 3-6 genuine strengths demonstrated during the interview.
+
+Avoid repeating similar ideas.
+
+=========================================================
+WEAKNESSES
+=========================================================
+
+List genuine weaknesses observed.
+
+They should be constructive and actionable.
+
+=========================================================
+COMPETENCY REPORTS
+=========================================================
+
+For every competency that was assessed, provide:
+
+- competency
+- level
+    (Strong, Average, Weak)
+- summary
+
+Use the Interview State as the primary source of truth.
+
+=========================================================
+TECHNICAL EVIDENCE
+=========================================================
+
+List concrete technical evidence observed during the interview.
+
+Examples:
+
+- Explained adversarial attacks.
+- Discussed SIMD optimization.
+- Optimized memory access.
+- Compared latency vs accuracy.
+- Explained HTTPS authentication.
+
+Only include evidence actually discussed.
+
+=========================================================
+HIGHLIGHTS
+=========================================================
+
+List the most impressive moments of the interview.
+
+=========================================================
+CONCERNS
+=========================================================
+
+List any concerns a hiring manager should know before making a decision.
+
+=========================================================
+OVERALL FEEDBACK
+=========================================================
+
+Write a professional summary of approximately 5-8 sentences.
+
+Discuss:
+
+- Technical depth
+- Communication
+- Confidence
+- Problem solving
+- Behavioral performance
+- Overall readiness for the role
+
+=========================================================
+HIRING RECOMMENDATION
+=========================================================
+
+Choose EXACTLY ONE:
+
+- Strong Hire
+- Hire
+- Borderline
+- No Hire
+
+Base this on the complete interview.
+
+=========================================================
+LEARNING ROADMAP
+=========================================================
+
+Provide 3-6 concrete recommendations that would genuinely help the candidate improve.
+
+Avoid generic advice like:
+
+"Practice more."
+
+Instead write recommendations specific to the interview.
+
+=========================================================
+IMPORTANT
+=========================================================
+
+Return ONLY valid JSON matching the InterviewReport schema.
+
+Do NOT include markdown.
+
+Do NOT include explanations.
+
+Do NOT include triple backticks.
+
+Return ONLY valid JSON.
+"""
+
+    response = client.models.generate_content(
+        model=MODEL,
+        contents=prompt,
+    )
+
+    print("Gemini Response")
+    print(response.text)
+    print("------------------------------------------------------------")
+
+    if not response.text:
+        raise ValueError("Gemini returned an empty response.")
+
+    response_text = response.text.strip()
+
+    if response_text.startswith("```json"):
+        response_text = response_text.replace("```json", "", 1)
+
+    if response_text.endswith("```"):
+        response_text = response_text[:-3]
+
+    response_text = response_text.strip()
+
+    try:
+        data = json.loads(response_text)
+        return InterviewReport(**data)
+
+    except json.JSONDecodeError:
+        print(response_text)
+        raise ValueError("Gemini did not return valid JSON.")

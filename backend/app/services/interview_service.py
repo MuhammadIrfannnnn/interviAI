@@ -1,10 +1,11 @@
+from requests import session
 from sqlalchemy.orm import Session
 from app.models.user import User
 from app.models.resume import Resume
 from app.models.parsed_resume import ParsedResume as ParsedResumeModel
 from app.models.interview_session import InterviewSession
 from app.models.interview_message import InterviewMessage
-from app.services.ai_service import generate_first_question,generate_next_question,evaluate_answer,plan_next_step,update_interview_state
+from app.services.ai_service import generate_final_report, generate_first_question,generate_next_question,evaluate_answer,plan_next_step,update_interview_state
 from fastapi import HTTPException
 from app.schemas.interview import InterviewStart
 from app.schemas.interview_message import InterviewAnswer
@@ -96,17 +97,36 @@ def continue_interview(db:Session,current_user:User,interview:InterviewAnswer):
     session.interview_state = updated_state.model_dump()
     db.commit()
     plan=plan_next_step(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,evaluations=evaluation_summary,state=updated_state)
-    if plan.action == "end_interview":
-        session.status = "completed"
-        session.ended_at = datetime.utcnow()
-        db.commit()
-        db.refresh(session)
-    # generate final report
-        return {
-             "message": "Interview completed successfully",
-             "session_id": session.id,
-             "reason":plan.reason
-             }
+    # if plan.action == "end_interview":
+    #     session.status = "completed"
+    #     session.ended_at = datetime.utcnow()
+    #     db.commit()
+    #     db.refresh(session)
+    # # generate final report
+    #     return {
+    #          "message": "Interview completed successfully",
+    #          "session_id": session.id,
+    #          "reason":plan.reason
+    #          }
+    report = generate_final_report(
+    parsed_resume=parsed_resume,
+    role_applied=session.role_applied,
+    difficulty=session.difficulty,
+    conversation=conversation,
+    evaluations=evaluation_summary,
+    state=updated_state,
+    )   
+    session.status = "completed"
+    session.ended_at = datetime.utcnow()
+    session.overall_score = report.overall_score
+
+    db.commit()
+
+    return {
+        "message": "Interview completed successfully",
+        "session_id": session.id,
+        "report": report.model_dump()
+    }
     
     # decision = should_end_interview(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,evaluations=evaluation_summary)
     # if decision.end_interview:

@@ -1,8 +1,8 @@
-"""add interview evaluation table
+"""add interview evaluations table
 
-Revision ID: f89f94f6151a
+Revision ID: 0d866d4888ac
 Revises: afb5847a352e
-Create Date: 2026-07-14 21:50:56.542764
+Create Date: 2026-07-14 18:05:21.855980
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'f89f94f6151a'
+revision: str = '0d866d4888ac'
 down_revision: Union[str, Sequence[str], None] = 'afb5847a352e'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
