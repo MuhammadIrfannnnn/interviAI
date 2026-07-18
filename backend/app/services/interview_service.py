@@ -13,6 +13,8 @@ from app.models.interview_evaluation import InterviewEvaluation
 from app.schemas.interview_state import InterviewState
 from datetime import datetime
 
+from app.models.interview_report import InterviewReport
+
 def start_interview(db:Session,current_user:User,interview:InterviewStart):
     resume=(db.query(Resume).filter(Resume.user_id==current_user.id).first())
     if not resume:
@@ -97,7 +99,7 @@ def continue_interview(db:Session,current_user:User,interview:InterviewAnswer):
     session.interview_state = updated_state.model_dump()
     db.commit()
     plan=plan_next_step(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,evaluations=evaluation_summary,state=updated_state)
-    # if plan.action == "end_interview":
+    if plan.action == "end_interview":
     #     session.status = "completed"
     #     session.ended_at = datetime.utcnow()
     #     db.commit()
@@ -108,25 +110,29 @@ def continue_interview(db:Session,current_user:User,interview:InterviewAnswer):
     #          "session_id": session.id,
     #          "reason":plan.reason
     #          }
-    report = generate_final_report(
-    parsed_resume=parsed_resume,
-    role_applied=session.role_applied,
-    difficulty=session.difficulty,
-    conversation=conversation,
-    evaluations=evaluation_summary,
-    state=updated_state,
-    )   
-    session.status = "completed"
-    session.ended_at = datetime.utcnow()
-    session.overall_score = report.overall_score
+        report = generate_final_report(
+        parsed_resume=parsed_resume,
+        role_applied=session.role_applied,
+        difficulty=session.difficulty,
+        conversation=conversation,
+        evaluations=evaluation_summary,
+        state=updated_state,
+        )
+        report_db = InterviewReport(
+        session_id=session.id,
+        report=report.model_dump(),
+        )
+        session.status = "completed"
+        session.ended_at = datetime.utcnow()
+        session.overall_score = report.overall_score
 
-    db.commit()
+        db.commit()
 
-    return {
-        "message": "Interview completed successfully",
-        "session_id": session.id,
-        "report": report.model_dump()
-    }
+        return {
+            "message": "Interview completed successfully",
+            "session_id": session.id,
+            "report": report.model_dump()
+        }
     
     # decision = should_end_interview(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,evaluations=evaluation_summary)
     # if decision.end_interview:

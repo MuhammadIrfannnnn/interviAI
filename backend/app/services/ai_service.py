@@ -6,7 +6,7 @@ from app.schemas.interview_decision import InterviewDecision
 from app.schemas.interview_plan import InterviewPlan
 from app.schemas.interview_state import InterviewState
 import json
-from backend.app.schemas.interview_report import InterviewReport
+from app.schemas.interview_report import InterviewReport
 
 client=genai.Client(api_key=settings.GEMINI_API_KEY)
 MODEL="gemini-3.5-flash"

@@ -20,3 +20,10 @@ class InterviewSession(Base):
     resume=relationship("Resume",back_populates="interview_sessions")
     messages=relationship("InterviewMessage",back_populates="session",cascade="all, delete-orphan")
     interview_state: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    
+    report = relationship(
+        "InterviewReport",
+        back_populates="session",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )

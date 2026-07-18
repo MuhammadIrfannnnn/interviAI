@@ -25,3 +25,4 @@ class InterviewReport(Base):
     )
 
     session = relationship("InterviewSession", back_populates="report")
+    
