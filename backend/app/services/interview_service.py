@@ -1,4 +1,3 @@
-from requests import session
 from sqlalchemy.orm import Session
 from app.models.user import User
 from app.models.resume import Resume
@@ -98,6 +97,7 @@ def continue_interview(db:Session,current_user:User,interview:InterviewAnswer):
     updated_state=update_interview_state(state=state,evaluation=evaluation_summary,conversation=conversation)
     session.interview_state = updated_state.model_dump()
     db.commit()
+    db.refresh(session)
     plan=plan_next_step(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,evaluations=evaluation_summary,state=updated_state)
     if plan.action == "end_interview":
     #     session.status = "completed"
@@ -118,16 +118,27 @@ def continue_interview(db:Session,current_user:User,interview:InterviewAnswer):
         evaluations=evaluation_summary,
         state=updated_state,
         )
+        existing_report = (db.query(InterviewReport).filter(InterviewReport.session_id == session.id).first())
+        if existing_report:
+            raise HTTPException(status_code=400,detail="Interview report already exists.")
         report_db = InterviewReport(
         session_id=session.id,
         report=report.model_dump(),
         )
+        db.add(report_db)
+        final_message = InterviewMessage(
+        session_id=session.id,
+        speaker="AI",
+        message="Thank you. That concludes the interview. I appreciate your time. Your interview report has been generated.")
+        db.add(final_message)
+
         session.status = "completed"
         session.ended_at = datetime.utcnow()
         session.overall_score = report.overall_score
-
         db.commit()
-
+        db.refresh(report_db)
+        db.refresh(session)
+        
         return {
             "message": "Interview completed successfully",
             "session_id": session.id,
@@ -153,4 +164,23 @@ def continue_interview(db:Session,current_user:User,interview:InterviewAnswer):
     "session_id": session.id,
     "evaluation":evaluation.model_dump(),
     "next_question": next_question
+    }
+
+
+def get_interview_history(db: Session,current_user: User):
+    sessions = (db.query(InterviewSession).filter(InterviewSession.user_id == current_user.id).order_by(InterviewSession.started_at.desc()).all())
+    history = []
+    for session in sessions:
+        history.append({
+            "session_id": session.id,
+            "role_applied": session.role_applied,
+            "difficulty": session.difficulty,
+            "status": session.status,
+            "overall_score": session.overall_score,
+            "started_at": session.started_at,
+            "ended_at": session.ended_at
+        })
+
+    return {
+        "interviews": history
     }

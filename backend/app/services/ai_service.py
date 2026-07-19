@@ -833,7 +833,9 @@ Discuss:
 =========================================================
 HIRING RECOMMENDATION
 =========================================================
+Return the field EXACTLY as:
 
+"recommendation": ""
 Choose EXACTLY ONE:
 
 - Strong Hire
@@ -894,6 +896,7 @@ Return ONLY valid JSON.
 
     try:
         data = json.loads(response_text)
+        print(json.dumps(data, indent=4))
         return InterviewReport(**data)
 
     except json.JSONDecodeError:

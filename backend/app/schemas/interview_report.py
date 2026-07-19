@@ -25,9 +25,6 @@ class InterviewReport(BaseModel):
 
     highlights: List[str]
     concerns: List[str]
-
-    interview_summary: str
-
     overall_feedback: str
 
     recommendation: Literal[
