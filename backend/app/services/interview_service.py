@@ -6,7 +6,7 @@ from app.models.interview_session import InterviewSession
 from app.models.interview_message import InterviewMessage
 from app.models.parsed_resume import ParsedResume
 from app.services.ai_service import generate_final_report, generate_first_question,generate_next_question,evaluate_answer,plan_next_step,update_interview_state
-from fastapi import HTTPException
+from fastapi import HTTPException, Path
 from app.schemas.interview import InterviewStart
 from app.schemas.interview_message import InterviewAnswer
 from app.models.interview_evaluation import InterviewEvaluation
@@ -333,50 +333,4 @@ def get_dashboard(
         "average_score": average_score,
         "best_score": best_score,
         "recent_interviews": recent_interviews,
-    }
-def get_resume(
-    db: Session,
-    current_user: User,
-):
-    resume = (
-        db.query(Resume)
-        .filter(
-            Resume.user_id == current_user.id
-        )
-        .first()
-    )
-
-    if not resume:
-        raise HTTPException(
-            status_code=404,
-            detail="Resume not found",
-        )
-
-    parsed_resume = (
-        db.query(ParsedResume)
-        .filter(
-            ParsedResume.resume_id == resume.id
-        )
-        .first()
-    )
-
-    return {
-        "resume": {
-            "id": resume.id,
-            "file_name": resume.file_name,
-            "uploaded_at": resume.uploaded_at,
-            "file_path": resume.file_path,
-        },
-        "parsed_resume": (
-            {
-                "name": parsed_resume.name,
-                "email": parsed_resume.email,
-                "skills": parsed_resume.skills,
-                "projects": parsed_resume.projects,
-                "experience": parsed_resume.experience,
-                "education": parsed_resume.education
-            }
-            if parsed_resume
-            else None
-        ),
     }
