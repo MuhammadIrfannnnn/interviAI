@@ -9,6 +9,7 @@ from fastapi import UploadFile, HTTPException
 from app.utils.pdf import extract_text_from_pdf
 from app.utils.text import clean_resume_text
 from app.services.ai_service import parse_resume
+from app.models.parsed_resume import ParsedResume
 from app.services.parsed_resume_service import save_parsed_resume
 UPLOAD_DIR = Path("uploads/resumes")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -42,4 +43,92 @@ def upload_resume(file: UploadFile, current_user: User, db: Session) -> Resume:
         "pages": len(fitz.open(file_path)),
         "characters": len(text),
         "Parsed_resume":parse_text.model_dump()
+    }
+def get_resume(
+    db: Session,
+    current_user: User,
+):
+    resume = (
+        db.query(Resume)
+        .filter(
+            Resume.user_id == current_user.id
+        )
+        .first()
+    )
+
+    if not resume:
+        raise HTTPException(
+            status_code=404,
+            detail="Resume not found",
+        )
+
+    parsed_resume = (
+        db.query(ParsedResume)
+        .filter(
+            ParsedResume.resume_id == resume.id
+        )
+        .first()
+    )
+
+    return {
+        "resume": {
+            "id": resume.id,
+            "file_name": resume.file_name,
+            "uploaded_at": resume.uploaded_at,
+            "file_path": resume.file_path,
+        },
+        "parsed_resume": (
+            {
+                "name": parsed_resume.name,
+                "email": parsed_resume.email,
+                "skills": parsed_resume.skills,
+                "projects": parsed_resume.projects,
+                "experience": parsed_resume.experience,
+                "education": parsed_resume.education
+            }
+            if parsed_resume
+            else None
+        ),
+    }
+    
+def delete_resume(
+    db: Session,
+    current_user: User,
+):
+    resume = (
+        db.query(Resume)
+        .filter(
+            Resume.user_id == current_user.id
+        )
+        .first()
+    )
+
+    if not resume:
+        raise HTTPException(
+            status_code=404,
+            detail="Resume not found",
+        )
+
+    parsed_resume = (
+        db.query(ParsedResume)
+        .filter(
+            ParsedResume.resume_id == resume.id
+        )
+        .first()
+    )
+
+    if parsed_resume:
+        db.delete(parsed_resume)
+
+    file_path = Path(resume.file_path)
+
+    if file_path.exists():
+        file_path.unlink()
+
+    db.delete(resume)
+
+    db.commit()
+
+    return {
+        "message": "Resume deleted successfully"
     }

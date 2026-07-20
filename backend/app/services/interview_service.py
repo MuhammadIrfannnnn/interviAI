@@ -4,6 +4,7 @@ from app.models.resume import Resume
 from app.models.parsed_resume import ParsedResume as ParsedResumeModel
 from app.models.interview_session import InterviewSession
 from app.models.interview_message import InterviewMessage
+from app.models.parsed_resume import ParsedResume
 from app.services.ai_service import generate_final_report, generate_first_question,generate_next_question,evaluate_answer,plan_next_step,update_interview_state
 from fastapi import HTTPException
 from app.schemas.interview import InterviewStart
@@ -183,4 +184,199 @@ def get_interview_history(db: Session,current_user: User):
 
     return {
         "interviews": history
+    }
+    
+def get_interview_details(
+    db: Session,
+    current_user: User,
+    session_id: int,
+):
+    session = (
+        db.query(InterviewSession)
+        .filter(
+            InterviewSession.id == session_id,
+            InterviewSession.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail="Interview session not found",
+        )
+
+    messages = (
+        db.query(InterviewMessage)
+        .filter(
+            InterviewMessage.session_id == session.id,
+        )
+        .order_by(
+            InterviewMessage.created_at.asc(),
+        )
+        .all()
+    )
+
+    evaluations = {
+    evaluation.message_id: evaluation
+    for evaluation in (
+        db.query(InterviewEvaluation)
+        .join(InterviewMessage)
+        .filter(InterviewMessage.session_id == session.id)
+        .all()
+        )
+    }
+
+    conversation = []
+
+    for message in messages:
+
+        evaluation = evaluations.get(message.id)
+
+        conversation.append(
+            {
+                "id": message.id,
+                "speaker": message.speaker,
+                "message": message.message,
+                "created_at": message.created_at,
+                "evaluation": (
+                    {
+                        "technical_score": evaluation.technical_score,
+                        "communication_score": evaluation.communication_score,
+                        "confidence_score": evaluation.confidence_score,
+                        "correctness": evaluation.correctness,
+                        "strengths": evaluation.strengths,
+                        "weaknesses": evaluation.weaknesses,
+                        "feedback": evaluation.feedback,
+                    }
+                    if evaluation
+                    else None
+                ),
+            }
+        )
+
+    return {
+        "session": {
+            "id": session.id,
+            "role_applied": session.role_applied,
+            "difficulty": session.difficulty,
+            "status": session.status,
+            "started_at": session.started_at,
+            "ended_at": session.ended_at,
+            "overall_score": session.overall_score,
+        },
+        "messages": conversation,
+        "report": (
+            session.report.report
+            if session.report
+            else None
+        ),
+    }
+def get_dashboard(
+    db: Session,
+    current_user: User,
+):
+    sessions = (
+        db.query(InterviewSession)
+        .filter(
+            InterviewSession.user_id == current_user.id
+        )
+        .order_by(
+            InterviewSession.started_at.desc()
+        )
+        .all()
+    )
+
+    total_interviews = len(sessions)
+
+    completed_sessions = [
+        session
+        for session in sessions
+        if session.status == "completed"
+    ]
+
+    completed_interviews = len(completed_sessions)
+
+    if completed_interviews > 0:
+        average_score = round(
+            sum(session.overall_score for session in completed_sessions)
+            / completed_interviews,
+            2,
+        )
+
+        best_score = max(
+            session.overall_score
+            for session in completed_sessions
+        )
+    else:
+        average_score = 0
+        best_score = 0
+
+    recent_interviews = []
+
+    for session in sessions[:5]:
+        recent_interviews.append(
+            {
+                "id": session.id,
+                "role_applied": session.role_applied,
+                "difficulty": session.difficulty,
+                "status": session.status,
+                "overall_score": session.overall_score,
+                "started_at": session.started_at,
+                "ended_at": session.ended_at,
+            }
+        )
+
+    return {
+        "total_interviews": total_interviews,
+        "completed_interviews": completed_interviews,
+        "average_score": average_score,
+        "best_score": best_score,
+        "recent_interviews": recent_interviews,
+    }
+def get_resume(
+    db: Session,
+    current_user: User,
+):
+    resume = (
+        db.query(Resume)
+        .filter(
+            Resume.user_id == current_user.id
+        )
+        .first()
+    )
+
+    if not resume:
+        raise HTTPException(
+            status_code=404,
+            detail="Resume not found",
+        )
+
+    parsed_resume = (
+        db.query(ParsedResume)
+        .filter(
+            ParsedResume.resume_id == resume.id
+        )
+        .first()
+    )
+
+    return {
+        "resume": {
+            "id": resume.id,
+            "file_name": resume.file_name,
+            "uploaded_at": resume.uploaded_at,
+            "file_path": resume.file_path,
+        },
+        "parsed_resume": (
+            {
+                "name": parsed_resume.name,
+                "email": parsed_resume.email,
+                "skills": parsed_resume.skills,
+                "projects": parsed_resume.projects,
+                "experience": parsed_resume.experience,
+                "education": parsed_resume.education
+            }
+            if parsed_resume
+            else None
+        ),
     }
