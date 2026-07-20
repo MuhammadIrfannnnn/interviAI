@@ -6,7 +6,7 @@ from pathlib import Path
 from app.database.dependencies import get_db
 from sqlalchemy.orm import Session
 from app.services.resume_service import delete_resume, upload_resume
-from app.services.interview_service import get_resume
+from app.services.resume_service import get_resume,delete_resume
 UPLOAD_DIR = Path("backend/uploads/resumes")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 router = APIRouter(
