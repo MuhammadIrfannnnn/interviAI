@@ -9,7 +9,7 @@ class InterviewSession(Base):
 
     id:Mapped[int]=mapped_column(primary_key=True,index=True)
     user_id:Mapped[int]=mapped_column(ForeignKey("users.id"),nullable=False)
-    resume_id:Mapped[int]=mapped_column(ForeignKey("resumes.id"),nullable=False)
+    resume_id: Mapped[int] = mapped_column(ForeignKey("resumes.id"),nullable=False)
     role_applied:Mapped[str]=mapped_column(String(100),nullable=False)
     difficulty:Mapped[str]=mapped_column(String(20),default="Medium")
     status:Mapped[str]=mapped_column(String(20),default="Started")

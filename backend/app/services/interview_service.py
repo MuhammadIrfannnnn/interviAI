@@ -12,8 +12,9 @@ from app.schemas.interview_message import InterviewAnswer
 from app.models.interview_evaluation import InterviewEvaluation
 from app.schemas.interview_state import InterviewState
 from datetime import datetime
-
+from fastapi.responses import FileResponse
 from app.models.interview_report import InterviewReport
+from app.services.pdf_service import generate_interview_report_pdf
 
 def start_interview(db:Session,current_user:User,interview:InterviewStart):
     resume=(db.query(Resume).filter(Resume.user_id==current_user.id).first())
@@ -334,3 +335,13 @@ def get_dashboard(
         "best_score": best_score,
         "recent_interviews": recent_interviews,
     }
+
+def export_interview_report(session_id:int,current_user:User,db:Session):
+    session=db.query(InterviewSession).filter(InterviewSession.id==session_id,InterviewSession.user_id==current_user.id).first()
+    if not session:
+        raise HTTPException(status_code=402,detail="Session Not found")
+    report = (db.query(InterviewReport).filter(InterviewReport.session_id == session.id,).first())
+    if not report:
+        raise HTTPException(status_code=404,detail="Interview report not found")
+    pdf_path = generate_interview_report_pdf(session=session,report=report.report)
+    return FileResponse(path=str(pdf_path),media_type="application/pdf",filename=f"Interview_Report_{session.id}.pdf")
