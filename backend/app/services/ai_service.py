@@ -9,7 +9,7 @@ import json
 from app.schemas.interview_report import InterviewReport
 
 client=genai.Client(api_key=settings.GEMINI_API_KEY)
-MODEL="gemini-3.5-flash"
+MODEL="gemini-3.6-flash"
 
 def parse_resume(text:str)->ParsedResume:
     prompt = f"""
