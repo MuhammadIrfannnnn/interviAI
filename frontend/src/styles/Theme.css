@@ -1,0 +1,42 @@
+/**
+ * InterviAI design tokens — Tailwind v4 CSS-first theme.
+ * Import this once in your root stylesheet, e.g. `@import "./styles/theme.css";`
+ * above your `@import "tailwindcss";` in index.css (or after — order doesn't
+ * matter for @theme, Tailwind merges it into the generated utility scale).
+ *
+ * Palette: near-black slate surfaces, cyan accent, restrained. No gradients
+ * beyond the one ambient signature panel on auth.
+ */
+
+@theme {
+  /* Surfaces */
+  --color-bg: #0a0b0d;
+  --color-surface: #131519;
+  --color-surface-raised: #191c21;
+  --color-border: #23262c;
+  --color-border-subtle: #1a1c21;
+
+  /* Text */
+  --color-text-primary: #f2f3f5;
+  --color-text-secondary: #9aa1ac;
+  --color-text-muted: #5b6270;
+
+  /* Accent — cyan, used sparingly */
+  --color-accent: #22d3ee;
+  --color-accent-hover: #67e3f5;
+  --color-accent-muted: #0e7490;
+  --color-accent-soft: rgba(34, 211, 238, 0.08);
+
+  /* Status */
+  --color-danger: #f87171;
+  --color-danger-soft: rgba(248, 113, 113, 0.08);
+
+  /* Type */
+  --font-sans: "Inter", "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "JetBrains Mono", ui-monospace, monospace;
+
+  /* Radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+}
