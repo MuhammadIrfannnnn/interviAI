@@ -2,6 +2,10 @@ import { Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
+import Dashboard from "./pages/dashboard/Dashboard";
+import Resume from "./pages/resume/Resume";
+import Interview from "./pages/interview/Interview";
+import Landing from "./pages/landing/Landing";
 
 // TODO: swap these placeholders out as each real page gets built.
 // Keeping them here means the route tree compiles and is testable
@@ -18,14 +22,15 @@ function App() {
   return (
     <Routes>
       {/* Public routes */}
+      <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
 
       {/* Protected routes */}
       <Route element={<ProtectedRoute />}>
-        <Route path="/dashboard" element={<Placeholder label="Dashboard" />} />
-        <Route path="/resume" element={<Placeholder label="Resume" />} />
-        <Route path="/interview" element={<Placeholder label="Interview" />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/resume" element={<Resume />} />
+        <Route path="/interview" element={<Interview />} />
         <Route path="/history" element={<Placeholder label="History" />} />
         <Route path="/report/:id" element={<Placeholder label="Report" />} />
         <Route path="/profile" element={<Placeholder label="Profile" />} />
