@@ -6,6 +6,9 @@ import Dashboard from "./pages/dashboard/Dashboard";
 import Resume from "./pages/resume/Resume";
 import Interview from "./pages/interview/Interview";
 import Landing from "./pages/landing/Landing";
+import History from "./pages/history/History";
+import Report from "./pages/report/Report";
+import Profile from "./pages/profile/Profile";
 
 // TODO: swap these placeholders out as each real page gets built.
 // Keeping them here means the route tree compiles and is testable
@@ -31,9 +34,9 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/resume" element={<Resume />} />
         <Route path="/interview" element={<Interview />} />
-        <Route path="/history" element={<Placeholder label="History" />} />
-        <Route path="/report/:id" element={<Placeholder label="Report" />} />
-        <Route path="/profile" element={<Placeholder label="Profile" />} />
+        <Route path="/history" element={<History />} />
+        <Route path="/report/:id" element={<Report />} />
+        <Route path="/profile" element={<Profile />} />
       </Route>
 
       <Route path="*" element={<Placeholder label="404" />} />

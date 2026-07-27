@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
+import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { LayoutDashboard, FileText, History, User, LogOut, Menu, X } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";

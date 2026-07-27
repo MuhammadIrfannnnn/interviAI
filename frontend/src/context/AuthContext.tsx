@@ -2,6 +2,7 @@ import { createContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { authService } from "../services/AuthService";
 import type { LoginPayload, RegisterPayload, User } from "../types/Auth";
+import { decodeToken } from "../utils/jwt";
 
 const TOKEN_KEY = "interviai_token";
 const USER_KEY = "interviai_user";
@@ -59,14 +60,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(sessionUser);
   };
 
+  // The backend confirmed /auth/login returns only { access_token, token_type }
+  // — no user object. We derive id/email/role from the JWT's own claims
+  // instead, and layer in full_name from a `user` field if the response
+  // ever includes one (e.g. register might differ from login).
+  const buildUser = (accessToken: string, responseUser?: User): User => {
+    const claims = decodeToken(accessToken);
+    return {
+      id: responseUser?.id ?? claims?.sub ?? "",
+      email: responseUser?.email ?? claims?.email ?? "",
+      full_name: responseUser?.full_name,
+      role: responseUser?.role ?? claims?.role,
+    };
+  };
+
   const login = async (payload: LoginPayload) => {
-    const { access_token, user: loggedInUser } = await authService.login(payload);
-    persistSession(access_token, loggedInUser);
+    const { access_token, user: responseUser } = await authService.login(payload);
+    persistSession(access_token, buildUser(access_token, responseUser));
   };
 
   const register = async (payload: RegisterPayload) => {
-    const { access_token, user: newUser } = await authService.register(payload);
-    persistSession(access_token, newUser);
+    const { access_token, user: responseUser } = await authService.register(payload);
+    persistSession(access_token, buildUser(access_token, responseUser));
   };
 
   const logout = () => {
