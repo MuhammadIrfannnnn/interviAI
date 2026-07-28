@@ -1,12 +1,13 @@
-// NOTE: StartInterviewPayload / InterviewMessagePayload / InterviewTurnResponse
-// below are still placeholders pending /docs confirmation for /interview/start
-// and /interview/message. Everything else in this file (session, messages,
-// report shapes) is confirmed against the real GET /interview/{session_id}
-// response.
-
+// Confirmed against real /interview/start and /interview/message responses.
 export interface StartInterviewPayload {
   role_applied: string;
   difficulty: string;
+}
+
+export interface StartInterviewResponse {
+  message: string;
+  session_id: number;
+  first_question: string;
 }
 
 export interface InterviewMessagePayload {
@@ -14,26 +15,14 @@ export interface InterviewMessagePayload {
   answer: string;
 }
 
-export interface InterviewQuestion {
-  question: string;
-  // Backend may include topic/competency metadata alongside the question —
-  // add fields here once confirmed.
-}
-
-export interface AnswerEvaluation {
-  score: number;
-  feedback: string;
-}
-
-// Response shape for both /interview/start and /interview/message —
-// per the doc, every answer returns either the next question or, if the
-// interview is ending, the final report.
-export interface InterviewTurnResponse {
+// NOTE: next_question being null/absent is assumed to signal the interview
+// has ended — not yet confirmed against a real "final answer" response.
+// When that happens, the page falls back to GET /interview/{session_id}
+// for the closing message and full report.
+export interface InterviewMessageResponse {
   session_id: number;
-  status: "active" | "completed";
-  question: InterviewQuestion | null;
-  evaluation: AnswerEvaluation | null;
-  report: InterviewReport | null;
+  evaluation: MessageEvaluation;
+  next_question: string | null;
 }
 
 export interface CompetencyReport {
@@ -67,6 +56,9 @@ export interface MessageEvaluation {
   strengths: string[];
   weaknesses: string[];
   feedback: string;
+  // Present on the live /interview/message response, not persisted on
+  // historical messages returned by GET /interview/{session_id}.
+  follow_up_strategy?: string;
 }
 
 export interface InterviewMessage {

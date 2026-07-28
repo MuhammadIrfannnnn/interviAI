@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, FileText, History, User, LogOut, Menu, X } from "lucide-react";
+import { LayoutDashboard, FileText, MessageSquare, History, User, LogOut, Menu, X } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 
 interface AppLayoutProps {
@@ -10,7 +10,8 @@ interface AppLayoutProps {
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/interview", label: "Interview", icon: FileText },
+  { to: "/resume", label: "Resume", icon: FileText },
+  { to: "/interview", label: "Interview", icon: MessageSquare },
   { to: "/history", label: "History", icon: History },
   { to: "/profile", label: "Profile", icon: User },
 ];

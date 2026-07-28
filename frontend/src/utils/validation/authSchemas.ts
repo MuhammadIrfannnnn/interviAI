@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isStrictlyValidEmail, isDisposableEmailDomain } from "./emailValidation";
 
 export const loginSchema = z.object({
   email: z.string().min(1, "Email is required").email("Enter a valid email"),
@@ -10,7 +11,12 @@ export type LoginFormValues = z.infer<typeof loginSchema>;
 export const registerSchema = z
   .object({
     full_name: z.string().min(2, "Name must be at least 2 characters"),
-    email: z.string().min(1, "Email is required").email("Enter a valid email"),
+    email: z
+      .string()
+      .min(1, "Email is required")
+      .email("Enter a valid email")
+      .refine(isStrictlyValidEmail, "Enter a valid email address")
+      .refine((email) => !isDisposableEmailDomain(email), "Temporary or disposable emails aren't allowed"),
     password: z
       .string()
       .min(8, "Password must be at least 8 characters")

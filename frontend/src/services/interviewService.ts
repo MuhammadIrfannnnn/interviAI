@@ -1,20 +1,21 @@
 import api from "./api";
 import type {
   StartInterviewPayload,
+  StartInterviewResponse,
   InterviewMessagePayload,
-  InterviewTurnResponse,
+  InterviewMessageResponse,
   InterviewHistoryItem,
   InterviewDetails,
 } from "../types/interview";
 
 export const interviewService = {
-  async start(payload: StartInterviewPayload): Promise<InterviewTurnResponse> {
-    const { data } = await api.post<InterviewTurnResponse>("/interview/start", payload);
+  async start(payload: StartInterviewPayload): Promise<StartInterviewResponse> {
+    const { data } = await api.post<StartInterviewResponse>("/interview/start", payload);
     return data;
   },
 
-  async sendMessage(payload: InterviewMessagePayload): Promise<InterviewTurnResponse> {
-    const { data } = await api.post<InterviewTurnResponse>("/interview/message", payload);
+  async sendMessage(payload: InterviewMessagePayload): Promise<InterviewMessageResponse> {
+    const { data } = await api.post<InterviewMessageResponse>("/interview/message", payload);
     return data;
   },
 
