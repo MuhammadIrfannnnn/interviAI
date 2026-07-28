@@ -1,37 +1,105 @@
 from sqlalchemy.orm import Session
 from app.models.user import User
 from app.core.security import hash_password,verify_password,create_access_token
-from app.schemas.user import UserCreate,UserLogin
+from app.schemas.user import UserCreate,UserLogin,RegisterResponse,TokenResponse,VerifyOtpRequest
+from datetime import datetime
+from app.utils.otp import generate_otp,hash_otp,get_otp_expiry,verify_otp_hash
+from app.services.email_service import send_otp_email
+from app.models.user import OtpPurpose
 
-def register_user(db:Session,user_data:UserCreate)->User:
+def register_user(db:Session,user_data:UserCreate)->RegisterResponse:
     existing_user=db.query(User).filter(User.email==user_data.email).first()
     if existing_user:
         raise ValueError("User with this email already exists")
     hashed_password=hash_password(user_data.password)
+    otp=generate_otp()
+    otp_hash=hash_otp(otp)
     new_user=User(
-        full_name=user_data.full_name,  
+        full_name=user_data.full_name,
         email=user_data.email,
-        hashed_password=hashed_password
+        hashed_password=hashed_password,
+        is_verified=False,
+        otp_hash=otp_hash,
+        otp_purpose=OtpPurpose.VERIFY_EMAIL,
+        otp_expires_at=get_otp_expiry(),
+        last_otp_sent_at=datetime.utcnow()
     )
   
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    return new_user
+    try:
+        send_otp_email(
+            email=new_user.email,
+            otp=otp,
+            purpose=OtpPurpose.VERIFY_EMAIL.value,
+        )
+    except Exception:
+        db.delete(new_user)
+        db.commit()
+        raise ValueError("Failed to send verification email.")
+    return RegisterResponse(
+    message="Verification code sent successfully.",
+    email=new_user.email,
+)
 
-def login_user(db:Session,user_data:UserLogin)->dict:
+def login_user(db:Session,user_data:UserLogin)->TokenResponse:
     user=db.query(User).filter(User.email==user_data.email).first()
     if not user:
         raise ValueError("Invalid email or password")
+    if not user.is_verified:
+        raise ValueError("Please verify your email before logging in.")
     if not verify_password(user_data.password,user.hashed_password):
         raise ValueError("Invalid email or password")
     data={
     "sub": str(user.id),
     "email": user.email,
-    "role": user.role
+    "role": user.role.value
     }
     token=create_access_token(data=data)
-    return {"access_token":token,"token_type":"bearer"}
+    return TokenResponse(access_token=token,token_type="bearer")
 
+
+def verify_otp(db: Session,request: VerifyOtpRequest)-> TokenResponse:
+    user = (db.query(User).filter(User.email == request.email).first())
+    if not user:
+        raise ValueError("Invalid verification code.")
+    if user.is_verified:
+        raise ValueError("Email is already verified.")
+    if (
+        user.otp_hash is None
+        or user.otp_purpose is None
+        or user.otp_expires_at is None
+    ):
+        raise ValueError("Verification code not found.")
+
+    if user.otp_purpose != OtpPurpose.VERIFY_EMAIL:
+        raise ValueError("Invalid verification code.")
+
+    if datetime.utcnow() > user.otp_expires_at:
+        raise ValueError("Verification code has expired.")
+
+    if not verify_otp_hash(request.otp,user.otp_hash):
+        raise ValueError("Invalid verification code.")
+    user.is_verified = True
+
+    user.otp_hash = None
+    user.otp_purpose = None
+    user.otp_expires_at = None
+    user.last_otp_sent_at = None
+
+    db.commit()
+    db.refresh(user)
+
+    payload = {
+        "sub": str(user.id),
+        "email": user.email,
+        "role": user.role.value,
+    }
+    token = create_access_token(payload)
+    return TokenResponse(
+        access_token=token,
+        token_type="bearer",
+    )
 
 

@@ -37,13 +37,10 @@ def upload_resume(file: UploadFile, current_user: User, db: Session) -> Resume:
         if parsed_resume:
             parsed_resume.name = parsed_data.name
             parsed_resume.email = parsed_data.email
-            parsed_resume.phone = parsed_data.phone
-            parsed_resume.summary = parsed_data.summary
             parsed_resume.skills = parsed_data.skills
             parsed_resume.projects = parsed_data.projects
             parsed_resume.experience = parsed_data.experience
             parsed_resume.education = parsed_data.education
-            parsed_resume.certifications = parsed_data.certifications
         else:
             save_parsed_resume(
                 db=db,

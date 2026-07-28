@@ -11,6 +11,5 @@ class InterviewHistoryItem(BaseModel):
     started_at: datetime
     ended_at: datetime | None
 
-
 class InterviewHistoryResponse(BaseModel):
     interviews: list[InterviewHistoryItem]

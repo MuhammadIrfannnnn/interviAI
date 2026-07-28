@@ -72,8 +72,34 @@ export default function Resume() {
     setStatus("uploading");
     try {
       const data = await resumeService.uploadResume(file);
-      setResume(data);
-      setStatus("ready");
+
+      // Parsing (via Gemini, per the backend) can take a moment. If the
+      // upload response comes back before parsing finishes, parsed_resume
+      // may be incomplete — poll GET /resume/ briefly until it looks ready
+      // rather than rendering with holes or crashing on missing fields.
+      const looksParsed = (r: ResumeResponse) =>
+        !!r.parsed_resume?.name && Array.isArray(r.parsed_resume?.skills);
+
+      if (looksParsed(data)) {
+        setResume(data);
+        setStatus("ready");
+        return;
+      }
+
+      let attempts = 0;
+      const maxAttempts = 8;
+      const poll = async (): Promise<void> => {
+        attempts += 1;
+        const fresh = await resumeService.getResume();
+        if (looksParsed(fresh) || attempts >= maxAttempts) {
+          setResume(fresh);
+          setStatus("ready");
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 1500));
+        return poll();
+      };
+      await poll();
     } catch {
       setErrorMessage("Upload failed. Try again.");
       setStatus(resume ? "ready" : "empty");
@@ -197,14 +223,16 @@ export default function Resume() {
 
                 <div className="rounded-lg border border-border bg-surface p-5">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-text-primary">{resume.parsed_resume.name}</p>
+                    <p className="text-sm font-medium text-text-primary">
+                      {resume.parsed_resume?.name || "—"}
+                    </p>
                   </div>
                   <div className="mt-1 flex items-center gap-1.5 text-xs text-text-muted">
                     <Mail className="h-3.5 w-3.5" />
-                    {resume.parsed_resume.email}
+                    {resume.parsed_resume?.email || "—"}
                   </div>
 
-                  {resume.parsed_resume.skills.length > 0 && (
+                  {(resume.parsed_resume?.skills?.length ?? 0) > 0 && (
                     <div className="mt-5">
                       <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-text-muted">
                         <Wrench className="h-3.5 w-3.5" />
@@ -223,7 +251,7 @@ export default function Resume() {
                     </div>
                   )}
 
-                  {resume.parsed_resume.projects.length > 0 && (
+                  {(resume.parsed_resume?.projects?.length ?? 0) > 0 && (
                     <div className="mt-5">
                       <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-text-muted">
                         <Briefcase className="h-3.5 w-3.5" />
@@ -239,7 +267,7 @@ export default function Resume() {
                     </div>
                   )}
 
-                  {resume.parsed_resume.education.length > 0 && (
+                  {(resume.parsed_resume?.education?.length ?? 0) > 0 && (
                     <div className="mt-5">
                       <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-text-muted">
                         <GraduationCap className="h-3.5 w-3.5" />

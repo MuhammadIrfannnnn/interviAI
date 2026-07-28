@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     ALGORITHM: str
     LLM_PROVIDER:str
     GEMINI_API_KEY:str
+    SMTP_HOST: str
+    SMTP_PORT: int
+    SMTP_EMAIL: str
+    SMTP_PASSWORD: str
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
