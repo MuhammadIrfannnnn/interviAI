@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database.dependencies import get_db
-from app.schemas.user import UserCreate, UserLogin,TokenResponse,RegisterResponse,VerifyOtpRequest
-from app.services.auth_service import register_user,login_user,verify_otp
+from app.schemas.user import ForgotPasswordRequest, ResetPasswordRequest, UserCreate, UserLogin,TokenResponse,RegisterResponse,VerifyOtpRequest,MessageResponse,ResendOtpRequest
+from app.services.auth_service import forgot_password, register_user,login_user, reset_password,verify_otp
+from app.services.email_service import resend_otp
 
 
 router=APIRouter(
@@ -31,6 +32,63 @@ def verify_otp_endpoint(
 ):
     try:
         return verify_otp(
+            db=db,
+            request=request,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+@router.post(
+    "/resend-otp",
+    response_model=MessageResponse,
+)
+def resend_otp_endpoint(
+    request: ResendOtpRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        return resend_otp(
+            db=db,
+            request=request,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+@router.post(
+    "/forgot-password",
+    response_model=MessageResponse,
+)
+def forgot_password_endpoint(
+    request: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        return forgot_password(
+            db=db,
+            request=request,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+        
+@router.post(
+    "/reset-password",
+    response_model=MessageResponse,
+)
+def reset_password_endpoint(
+    request: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        return reset_password(
             db=db,
             request=request,
         )

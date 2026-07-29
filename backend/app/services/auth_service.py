@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
-from app.models.user import User
+from app.models.user import AuthProvider, User
 from app.core.security import hash_password,verify_password,create_access_token
-from app.schemas.user import UserCreate,UserLogin,RegisterResponse,TokenResponse,VerifyOtpRequest
-from datetime import datetime
+from app.schemas.user import ForgotPasswordRequest, MessageResponse, ResendOtpRequest, ResetPasswordRequest, UserCreate,UserLogin,RegisterResponse,TokenResponse,VerifyOtpRequest
+from datetime import datetime, timedelta
 from app.utils.otp import generate_otp,hash_otp,get_otp_expiry,verify_otp_hash
 from app.services.email_service import send_otp_email
 from app.models.user import OtpPurpose
@@ -100,6 +100,148 @@ def verify_otp(db: Session,request: VerifyOtpRequest)-> TokenResponse:
     return TokenResponse(
         access_token=token,
         token_type="bearer",
+    )
+    
+def resend_otp(
+    db: Session,
+    request: ResendOtpRequest,
+) -> MessageResponse:
+
+    user = (
+        db.query(User)
+        .filter(User.email == request.email)
+        .first()
+    )
+
+    if not user:
+        raise ValueError("User not found.")
+
+    if user.is_verified:
+        raise ValueError("Email is already verified.")
+
+    if (
+        user.last_otp_sent_at
+        and datetime.utcnow() - user.last_otp_sent_at < timedelta(seconds=60)
+    ):
+        raise ValueError(
+            "Please wait 60 seconds before requesting another OTP."
+        )
+
+    otp = generate_otp()
+
+    user.otp_hash = hash_otp(otp)
+    user.otp_purpose = OtpPurpose.VERIFY_EMAIL
+    user.otp_expires_at = get_otp_expiry()
+    user.last_otp_sent_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(user)
+
+    send_otp_email(
+        email=user.email,
+        otp=otp,
+        purpose=OtpPurpose.VERIFY_EMAIL.value,
+    )
+
+    return MessageResponse(
+        message="A new verification code has been sent to your email."
+    )
+    
+def forgot_password(
+    db: Session,
+    request: ForgotPasswordRequest,
+) -> MessageResponse:
+
+    generic_response = MessageResponse(
+        message="If an account exists for this email, a reset code has been sent."
+    )
+
+    user = (
+        db.query(User)
+        .filter(User.email == request.email)
+        .first()
+    )
+
+    # Don't reveal whether the email exists
+    if not user:
+        return generic_response
+
+    # Google accounts don't have local passwords
+    if user.auth_provider == AuthProvider.GOOGLE:
+        return generic_response
+
+    if (
+        user.last_otp_sent_at
+        and datetime.utcnow() - user.last_otp_sent_at < timedelta(seconds=60)
+    ):
+        raise ValueError(
+            "Please wait 60 seconds before requesting another reset code."
+        )
+
+    otp = generate_otp()
+
+    user.otp_hash = hash_otp(otp)
+    user.otp_purpose = OtpPurpose.RESET_PASSWORD
+    user.otp_expires_at = get_otp_expiry()
+    user.last_otp_sent_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(user)
+
+    send_otp_email(
+        email=user.email,
+        otp=otp,
+        purpose=OtpPurpose.RESET_PASSWORD.value,
+    )
+
+    return generic_response
+
+def reset_password(
+    db: Session,
+    request: ResetPasswordRequest,
+) -> MessageResponse:
+
+    user = (
+        db.query(User)
+        .filter(User.email == request.email)
+        .first()
+    )
+
+    if not user:
+        raise ValueError("Invalid reset request.")
+
+    if (
+        user.otp_hash is None
+        or user.otp_purpose is None
+        or user.otp_expires_at is None
+    ):
+        raise ValueError("Reset code not found.")
+
+    if user.otp_purpose != OtpPurpose.RESET_PASSWORD:
+        raise ValueError("Invalid reset code.")
+
+    if datetime.utcnow() > user.otp_expires_at:
+        raise ValueError("Reset code has expired.")
+
+    if not verify_otp_hash(
+        request.otp,
+        user.otp_hash,
+    ):
+        raise ValueError("Invalid reset code.")
+
+    user.hashed_password = hash_password(
+        request.new_password
+    )
+
+    user.otp_hash = None
+    user.otp_purpose = None
+    user.otp_expires_at = None
+    user.last_otp_sent_at = None
+
+    db.commit()
+
+    return MessageResponse(
+        message="Password reset successfully."
     )
 
 
