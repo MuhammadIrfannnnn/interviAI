@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database.dependencies import get_db
-from app.schemas.user import ForgotPasswordRequest, ResetPasswordRequest, UserCreate, UserLogin,TokenResponse,RegisterResponse,VerifyOtpRequest,MessageResponse,ResendOtpRequest
-from app.services.auth_service import forgot_password, register_user,login_user, reset_password,verify_otp
+from app.schemas.user import ForgotPasswordRequest, ResetPasswordRequest, UserCreate, UserLogin,TokenResponse,RegisterResponse,VerifyOtpRequest,MessageResponse,ResendOtpRequest,GoogleLoginRequest
+from app.services.auth_service import forgot_password, register_user,login_user, reset_password,verify_otp,google_login
 from app.services.email_service import resend_otp
 
 
@@ -89,6 +89,25 @@ def reset_password_endpoint(
 ):
     try:
         return reset_password(
+            db=db,
+            request=request,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+@router.post(
+    "/google",
+    response_model=TokenResponse,
+)
+def google_login_endpoint(
+    request: GoogleLoginRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        return google_login(
             db=db,
             request=request,
         )

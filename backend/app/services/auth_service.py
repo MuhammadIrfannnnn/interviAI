@@ -1,11 +1,14 @@
 from sqlalchemy.orm import Session
 from app.models.user import AuthProvider, User
 from app.core.security import hash_password,verify_password,create_access_token
-from app.schemas.user import ForgotPasswordRequest, MessageResponse, ResendOtpRequest, ResetPasswordRequest, UserCreate,UserLogin,RegisterResponse,TokenResponse,VerifyOtpRequest
+from app.schemas.user import ForgotPasswordRequest, MessageResponse, ResendOtpRequest, ResetPasswordRequest, UserCreate,UserLogin,RegisterResponse,TokenResponse,VerifyOtpRequest,GoogleLoginRequest
 from datetime import datetime, timedelta
 from app.utils.otp import generate_otp,hash_otp,get_otp_expiry,verify_otp_hash
 from app.services.email_service import send_otp_email
 from app.models.user import OtpPurpose
+from google.oauth2 import id_token
+from google.auth.transport import requests
+from app.core.config import settings
 
 def register_user(db:Session,user_data:UserCreate)->RegisterResponse:
     existing_user=db.query(User).filter(User.email==user_data.email).first()
@@ -242,6 +245,52 @@ def reset_password(
 
     return MessageResponse(
         message="Password reset successfully."
+    )
+
+def google_login(db: Session,request:GoogleLoginRequest)->TokenResponse:
+    try:
+        id_info = id_token.verify_oauth2_token(
+            request.id_token,
+            requests.Request(),
+            settings.GOOGLE_CLIENT_ID,
+        )
+    except Exception:
+        raise ValueError("Invalid Google token.")
+    email = id_info["email"]
+    full_name = id_info.get("name", "")
+    email_verified = id_info.get("email_verified", False)
+    if not email_verified:
+        raise ValueError("Google account is not verified.")
+    user = (db.query(User).filter(User.email == email).first())
+    if user is None:
+        user = User(
+            full_name=full_name,
+            email=email,
+            hashed_password=None,
+            auth_provider=AuthProvider.GOOGLE,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        if user.auth_provider == AuthProvider.LOCAL:
+            user.auth_provider = AuthProvider.GOOGLE
+            user.is_verified = True
+            db.commit()
+            db.refresh(user)
+        elif user.auth_provider==AuthProvider.GOOGLE:
+            pass
+    payload = {
+    "sub": str(user.id),
+    "email": user.email,
+    "role": user.role.value,
+}
+
+    token = create_access_token(payload)
+    return TokenResponse(
+        access_token=token,
+        token_type="bearer",
     )
 
 
