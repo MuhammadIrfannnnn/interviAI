@@ -2,13 +2,14 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AxiosError } from "axios";
-
 import { AuthLayout } from "../../layouts/AuthLayout";
 import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
-import { registerSchema, type RegisterFormValues } from "../../utils/validation/authSchemas";
+import { registerSchema } from "../../utils/validation/authSchemas";
+import type { RegisterFormValues } from "../../utils/validation/authSchemas";
 import { useAuth } from "../../hooks/useAuth";
+import { extractErrorMessage } from "../../utils/ExtractErrorMessage";
+import { GoogleSignInButton } from "../../components/auth/GoogleSignInButton";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -26,13 +27,9 @@ export default function Register() {
     try {
       const { confirmPassword, ...payload } = values;
       await registerUser(payload);
-      navigate("/resume");
+      navigate("/verify-otp", { state: { email: payload.email, fullName: payload.full_name } });
     } catch (err) {
-      const message =
-        err instanceof AxiosError
-          ? err.response?.data?.detail ?? "Couldn't create your account."
-          : "Something went wrong. Try again.";
-      setFormError(message);
+      setFormError(extractErrorMessage(err, "Couldn't create your account."));
     }
   };
 
@@ -41,6 +38,14 @@ export default function Register() {
       title="Create your account"
       subtitle="Set up in under a minute — no card required."
     >
+      <GoogleSignInButton onError={setFormError} disabled={isSubmitting} />
+
+      <div className="my-5 flex items-center gap-3">
+        <div className="h-px flex-1 bg-border-subtle" />
+        <span className="text-xs text-text-muted">or</span>
+        <div className="h-px flex-1 bg-border-subtle" />
+      </div>
+
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
         <Input
           label="Full name"

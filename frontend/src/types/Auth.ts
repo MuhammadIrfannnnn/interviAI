@@ -15,6 +15,37 @@ export interface AuthResponse {
   user?: User;
 }
 
+// Register no longer returns a token directly — it creates an unverified
+// account and triggers an OTP email. The token only arrives after
+// POST /auth/verify-otp succeeds.
+export interface RegisterResponse {
+  message: string;
+  email: string;
+}
+
+export interface VerifyOtpPayload {
+  email: string;
+  otp: string;
+}
+
+export interface ResendOtpPayload {
+  email: string;
+}
+
+export interface ForgotPasswordPayload {
+  email: string;
+}
+
+export interface ResetPasswordPayload {
+  email: string;
+  otp: string;
+  new_password: string;
+}
+
+export interface GoogleLoginPayload {
+  id_token: string;
+}
+
 export interface LoginPayload {
   email: string;
   password: string;

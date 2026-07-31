@@ -3,6 +3,10 @@ export interface DecodedToken {
   email: string;
   role?: string;
   exp?: number;
+  // Present on Google's own ID token (not our backend's), used to backfill
+  // display name since our backend's /auth/google response doesn't return one.
+  name?: string;
+  picture?: string;
 }
 
 /**

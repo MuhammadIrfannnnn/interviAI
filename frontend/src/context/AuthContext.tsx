@@ -1,7 +1,7 @@
 import { createContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { authService } from "../services/AuthService";
-import type { LoginPayload, RegisterPayload, User } from "../types/Auth";
+import type { LoginPayload, RegisterPayload, RegisterResponse, User } from "../types/Auth";
 import { decodeToken } from "../utils/jwt";
 
 const TOKEN_KEY = "interviai_token";
@@ -13,7 +13,19 @@ export interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (payload: LoginPayload) => Promise<void>;
-  register: (payload: RegisterPayload) => Promise<void>;
+  // Google ID token from @react-oauth/google's <GoogleLogin> onSuccess —
+  // reuses the exact same session-establishment path as email/password login.
+  // displayName comes from decoding Google's own token client-side (see
+  // GoogleSignInButton.tsx), since our backend's response has no user object.
+  loginWithGoogle: (idToken: string, displayName?: string) => Promise<void>;
+  // Returns the response (email + message) rather than logging the user
+  // in directly — registration now requires OTP verification before a
+  // session exists.
+  register: (payload: RegisterPayload) => Promise<RegisterResponse>;
+  // Called once POST /auth/verify-otp succeeds, with the token it returns.
+  // displayName carries through the name typed on the register form, since
+  // our backend's verify-otp response has no user object to get it from.
+  completeVerification: (accessToken: string, displayName?: string) => void;
   logout: () => void;
 }
 
@@ -79,9 +91,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
     persistSession(access_token, buildUser(access_token, responseUser));
   };
 
-  const register = async (payload: RegisterPayload) => {
-    const { access_token, user: responseUser } = await authService.register(payload);
-    persistSession(access_token, buildUser(access_token, responseUser));
+  const loginWithGoogle = async (idToken: string, displayName?: string) => {
+    const { access_token, user: responseUser } = await authService.googleLogin({ id_token: idToken });
+    const user = buildUser(access_token, responseUser);
+    persistSession(access_token, displayName ? { ...user, full_name: displayName } : user);
+  };
+
+  const register = async (payload: RegisterPayload): Promise<RegisterResponse> => {
+    // No session created here — register only triggers the OTP email.
+    // A session is only established once verify-otp succeeds.
+    return authService.register(payload);
+  };
+
+  const completeVerification = (accessToken: string, displayName?: string) => {
+    const user = buildUser(accessToken);
+    persistSession(accessToken, displayName ? { ...user, full_name: displayName } : user);
   };
 
   const logout = () => {
@@ -97,7 +121,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isAuthenticated: !!token,
     isLoading,
     login,
+    loginWithGoogle,
     register,
+    completeVerification,
     logout,
   };
 
