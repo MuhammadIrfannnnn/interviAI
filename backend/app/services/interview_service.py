@@ -15,6 +15,7 @@ from datetime import datetime
 from fastapi.responses import FileResponse
 from app.models.interview_report import InterviewReport
 from app.services.pdf_service import generate_interview_report_pdf
+from app.services.resume_summary import generate_resume_summary
 
 def start_interview(db:Session,current_user:User,interview:InterviewStart):
     resume=(db.query(Resume).filter(Resume.user_id==current_user.id).first())
@@ -23,12 +24,16 @@ def start_interview(db:Session,current_user:User,interview:InterviewStart):
     parsed_resume=(db.query(ParsedResumeModel).filter(ParsedResumeModel.resume_id==resume.id).first())
     if not parsed_resume:
         raise HTTPException(status_code=404,detail="parsed resume not found")
+    summary = generate_resume_summary(parsed_resume)
+
+
     session=InterviewSession(
         user_id=current_user.id,
         resume_id=resume.id,
         role_applied=interview.role_applied,
         difficulty=interview.difficulty,
-        status="active"
+        status="active",
+        resume_summary=summary
     )  
     state = InterviewState()
     session.interview_state = state.model_dump()
@@ -36,7 +41,7 @@ def start_interview(db:Session,current_user:User,interview:InterviewStart):
     db.commit()
     db.refresh(session)
 
-    first_question=generate_first_question(parsed_resume=parsed_resume,role_applied=interview.role_applied,difficulty=interview.difficulty)
+    first_question=generate_first_question(resume_summary=summary,role_applied=interview.role_applied,difficulty=interview.difficulty)
     message=InterviewMessage(session_id=session.id,speaker="AI",message=first_question)
     db.add(message)
     db.commit()
@@ -57,50 +62,58 @@ def continue_interview(db:Session,current_user:User,interview:InterviewAnswer):
     db.add(candidate_message)
     db.commit()
     db.refresh(candidate_message)
-    resume=(db.query(Resume).filter(Resume.user_id==current_user.id).first())
-    if not resume:
-        raise HTTPException(status_code=404,detail="resume not found")
-    parsed_resume=(db.query(ParsedResumeModel).filter(ParsedResumeModel.resume_id==resume.id).first())
-    if not parsed_resume:
-        raise HTTPException(status_code=404,detail="parsed resume not found")
+    # resume=(db.query(Resume).filter(Resume.user_id==current_user.id).first())
+    # if not resume:
+    #     raise HTTPException(status_code=404,detail="resume not found")
+    # parsed_resume=(db.query(ParsedResumeModel).filter(ParsedResumeModel.resume_id==resume.id).first())
+    # if not parsed_resume:
+    #     raise HTTPException(status_code=404,detail="parsed resume not found")
     messages=(db.query(InterviewMessage).filter(InterviewMessage.session_id==session.id).order_by(InterviewMessage.created_at.asc()).all())
-    conversation=""
+    full_conversation=""
     for message in messages:
-        conversation+=f"{message.speaker}:{message.message}\n"
-    evaluation=evaluate_answer(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,candidate_answer=interview.answer)
-    evaluation_db = InterviewEvaluation(
-    message_id=candidate_message.id,
-    technical_score=evaluation.technical_score,
-    communication_score=evaluation.communication_score,
-    confidence_score=evaluation.confidence_score,
-    correctness=evaluation.correctness,
-    strengths=evaluation.strengths,
-    weaknesses=evaluation.weaknesses,
-    feedback=evaluation.feedback,
-    )
-    db.add(evaluation_db)
-    db.commit()
-    db.refresh(evaluation_db)
-    evaluations = (db.query(InterviewEvaluation).join(InterviewMessage).filter(InterviewMessage.session_id == session.id).all())
+        full_conversation+=f"{message.speaker}:{message.message}\n"
+    recent_messages = messages[-4:]  # last 4 messages
+    recent_conversation = ""
+
+    for message in recent_messages:
+        recent_conversation += (
+            f"{message.speaker}: {message.message}\n"
+        )
     evaluation_summary = ""
-    for eval_record in evaluations:
-        evaluation_summary += f"""
-    Technical: {eval_record.technical_score}/10
-    Communication: {eval_record.communication_score}/10
-    Confidence: {eval_record.confidence_score}/10
-    Correctness: {eval_record.correctness}
-    Strengths:
-    {", ".join(eval_record.strengths)}
-    Weaknesses:
-    {", ".join(eval_record.weaknesses)}
-    Feedback: {eval_record.feedback}
-    """
+    # evaluation=evaluate_answer(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,candidate_answer=interview.answer)
+    # evaluation_db = InterviewEvaluation(
+    # message_id=candidate_message.id,
+    # technical_score=evaluation.technical_score,
+    # communication_score=evaluation.communication_score,
+    # confidence_score=evaluation.confidence_score,
+    # correctness=evaluation.correctness,
+    # strengths=evaluation.strengths,
+    # weaknesses=evaluation.weaknesses,
+    # feedback=evaluation.feedback,
+    # )
+    # db.add(evaluation_db)
+    # db.commit()
+    # db.refresh(evaluation_db)
+    # evaluations = (db.query(InterviewEvaluation).join(InterviewMessage).filter(InterviewMessage.session_id == session.id).all())
+    # evaluation_summary = ""
+    # for eval_record in evaluations:
+    #     evaluation_summary += f"""
+    # Technical: {eval_record.technical_score}/10
+    # Communication: {eval_record.communication_score}/10
+    # Confidence: {eval_record.confidence_score}/10
+    # Correctness: {eval_record.correctness}
+    # Strengths:
+    # {", ".join(eval_record.strengths)}
+    # Weaknesses:
+    # {", ".join(eval_record.weaknesses)}
+    # Feedback: {eval_record.feedback}
+    # """
     state = InterviewState(**session.interview_state)
-    updated_state=update_interview_state(state=state,evaluation=evaluation_summary,conversation=conversation)
+    updated_state=update_interview_state(state=state,evaluation=evaluation_summary,conversation=recent_conversation)
     session.interview_state = updated_state.model_dump()
     db.commit()
     db.refresh(session)
-    plan=plan_next_step(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,evaluations=evaluation_summary,state=updated_state)
+    plan=plan_next_step(resume_summary=session.resume_summary,role_applied=session.role_applied,difficulty=session.difficulty,conversation=recent_conversation,evaluations=evaluation_summary,state=updated_state)
     if plan.action == "end_interview":
     #     session.status = "completed"
     #     session.ended_at = datetime.utcnow()
@@ -113,10 +126,10 @@ def continue_interview(db:Session,current_user:User,interview:InterviewAnswer):
     #          "reason":plan.reason
     #          }
         report = generate_final_report(
-        parsed_resume=parsed_resume,
+        resume_summary=session.resume_summary,
         role_applied=session.role_applied,
         difficulty=session.difficulty,
-        conversation=conversation,
+        conversation=full_conversation,
         evaluations=evaluation_summary,
         state=updated_state,
         )
@@ -157,14 +170,13 @@ def continue_interview(db:Session,current_user:User,interview:InterviewAnswer):
     #     "reason": decision.reason,
     #     "evaluation": evaluation.model_dump()
     #     }
-    next_question=generate_next_question(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,evaluation=evaluation,plan=plan)
+    next_question=generate_next_question(resume_summary=session.resume_summary,role_applied=session.role_applied,difficulty=session.difficulty,conversation=recent_conversation,plan=plan)
     ai_message=InterviewMessage(session_id=session.id,speaker="AI",message=next_question)
     db.add(ai_message)
     db.commit()
     db.refresh(ai_message)
     return {
     "session_id": session.id,
-    "evaluation":evaluation.model_dump(),
     "next_question": next_question
     }
 

@@ -1,6 +1,6 @@
 from app.database.base import Base
 from sqlalchemy.orm import Mapped,mapped_column,relationship
-from sqlalchemy import String,DateTime,ForeignKey,Float,Column
+from sqlalchemy import String,DateTime,ForeignKey,Float,Column, Text
 from datetime import datetime
 from sqlalchemy import JSON
 
@@ -20,6 +20,7 @@ class InterviewSession(Base):
     resume=relationship("Resume",back_populates="interview_sessions")
     messages=relationship("InterviewMessage",back_populates="session",cascade="all, delete-orphan")
     interview_state: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    resume_summary: Mapped[str | None] = mapped_column(Text)    
     
     report = relationship(
         "InterviewReport",

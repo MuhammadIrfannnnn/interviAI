@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.database.dependencies import get_db
 from app.schemas.user import ForgotPasswordRequest, ResetPasswordRequest, UserCreate, UserLogin,TokenResponse,RegisterResponse,VerifyOtpRequest,MessageResponse,ResendOtpRequest,GoogleLoginRequest
 from app.services.auth_service import forgot_password, register_user,login_user, reset_password,verify_otp,google_login
-from app.services.email_service import resend_otp
+from app.services.auth_service import resend_otp
 
 
 router=APIRouter(

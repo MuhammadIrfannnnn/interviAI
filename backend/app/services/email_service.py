@@ -10,7 +10,6 @@ from app.utils.otp import (
     hash_otp,
     get_otp_expiry,
 )
-# from app.services.email_service import send_otp_email
 
 
 def send_otp_email(
@@ -76,47 +75,3 @@ InterviAI
 
         smtp.send_message(message)
         
-def resend_otp(
-    db: Session,
-    request: ResendOtpRequest,
-) -> MessageResponse:
-
-    user = (
-        db.query(User)
-        .filter(User.email == request.email)
-        .first()
-    )
-
-    if not user:
-        raise ValueError("User not found.")
-
-    if user.is_verified:
-        raise ValueError("Email is already verified.")
-
-    if (
-        user.last_otp_sent_at
-        and datetime.utcnow() - user.last_otp_sent_at < timedelta(seconds=60)
-    ):
-        raise ValueError(
-            "Please wait 60 seconds before requesting another OTP."
-        )
-
-    otp = generate_otp()
-
-    user.otp_hash = hash_otp(otp)
-    user.otp_purpose = OtpPurpose.VERIFY_EMAIL
-    user.otp_expires_at = get_otp_expiry()
-    user.last_otp_sent_at = datetime.utcnow()
-
-    db.commit()
-    db.refresh(user)
-
-    send_otp_email(
-        email=user.email,
-        otp=otp,
-        purpose=OtpPurpose.VERIFY_EMAIL.value,
-    )
-
-    return MessageResponse(
-        message="A new verification code has been sent to your email."
-    )

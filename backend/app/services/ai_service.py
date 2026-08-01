@@ -59,25 +59,14 @@ Resume:
         print(response_text)
         raise ValueError("Gemini did not return valid JSON")
     
-def generate_first_question(parsed_resume:ParsedResume,role_applied:str,difficulty:str):
+def generate_first_question(resume_summary:str,role_applied:str,difficulty:str):
     prompt = f"""
 You are a professional technical interviewer.
 
 Candidate Information:
 
-Name: {parsed_resume.name}
-
-Skills:
-{parsed_resume.skills}
-
-Projects:
-{parsed_resume.projects}
-
-Experience:
-{parsed_resume.experience}
-
-Education:
-{parsed_resume.education}
+resume Summary:
+{resume_summary}
 
 Role Applied:
 {role_applied}
@@ -102,7 +91,7 @@ Instructions:
 
     return response.text.strip()
     
-def generate_next_question(parsed_resume:ParsedResume,role_applied:str,difficulty:str,conversation:str,evaluation:InterviewEvaluation,plan:InterviewPlan):
+def generate_next_question(resume_summary:str,role_applied:str,difficulty:str,conversation:str,plan:InterviewPlan):
     prompt = f"""
 You are an experienced interviewer.
 
@@ -122,20 +111,8 @@ Your ONLY responsibility is writing the next interview question.
 CANDIDATE INFORMATION
 ------------------------------------------------------------
 
-Name:
-{parsed_resume.name}
-
-Skills:
-{parsed_resume.skills}
-
-Projects:
-{parsed_resume.projects}
-
-Experience:
-{parsed_resume.experience}
-
-Education:
-{parsed_resume.education}
+resume Summary:
+{resume_summary}
 
 Role Applied:
 {role_applied}
@@ -148,12 +125,6 @@ PLANNER DECISION
 ------------------------------------------------------------
 
 {plan.model_dump_json(indent=2)}
-
-------------------------------------------------------------
-LATEST EVALUATION
-------------------------------------------------------------
-
-{evaluation.model_dump_json(indent=2)}
 
 ------------------------------------------------------------
 INTERVIEW CONVERSATION
@@ -226,7 +197,7 @@ Return ONLY the question.
 
     return response.text.strip()
 
-def evaluate_answer(parsed_resume:ParsedResume,role_applied:str,difficulty:str,conversation:str,candidate_answer:str):
+def evaluate_answer(resume_summary:str,role_applied:str,difficulty:str,conversation:str,candidate_answer:str):
     prompt = f"""
 You are a senior technical interviewer.
 
@@ -234,18 +205,8 @@ Evaluate ONLY the candidate's MOST RECENT answer.
 
 Candidate Resume
 
-Name:
-{parsed_resume.name}
-
-Skills:
-{parsed_resume.skills}
-
-Projects:
-{parsed_resume.projects}
-
-Experience:
-{parsed_resume.experience}
-
+resume Summary:
+{resume_summary}
 Conversation So Far:
 
 {conversation}
@@ -394,7 +355,7 @@ Do NOT include triple backticks.
         raise ValueError("Gemini did not return valid JSON")
     
 
-def plan_next_step(parsed_resume:ParsedResume,role_applied:str,difficulty:str,conversation:str,evaluations:str,state:InterviewState):
+def plan_next_step(resume_summary:str,role_applied:str,difficulty:str,conversation:str,evaluations:str,state:InterviewState):
     prompt = f"""
 You are an expert senior hiring manager responsible for PLANNING an interview.
 
@@ -409,20 +370,8 @@ Your ONLY responsibility is deciding what the interviewer should do next.
 CANDIDATE INFORMATION
 ------------------------------------------------------------
 
-Name:
-{parsed_resume.name}
-
-Skills:
-{parsed_resume.skills}
-
-Projects:
-{parsed_resume.projects}
-
-Experience:
-{parsed_resume.experience}
-
-Education:
-{parsed_resume.education}
+resume Summary: 
+{resume_summary}
 
 Role Applied:
 {role_applied}
@@ -663,7 +612,7 @@ Return ONLY valid JSON matching the InterviewState schema.
         raise ValueError("Gemini did not return valid JSON")
     
 def generate_final_report(
-    parsed_resume: ParsedResume,
+    resume_summary: str,
     role_applied: str,
     difficulty: str,
     conversation: str,
@@ -683,20 +632,8 @@ Your task is to produce the FINAL interview assessment.
 CANDIDATE INFORMATION
 =========================================================
 
-Name:
-{parsed_resume.name}
-
-Skills:
-{parsed_resume.skills}
-
-Projects:
-{parsed_resume.projects}
-
-Experience:
-{parsed_resume.experience}
-
-Education:
-{parsed_resume.education}
+resume Summary: 
+{resume_summary}
 
 =========================================================
 INTERVIEW DETAILS
