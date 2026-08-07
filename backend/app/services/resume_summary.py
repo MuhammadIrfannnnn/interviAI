@@ -1,49 +1,19 @@
 from app.models.parsed_resume import ParsedResume
-from app.services.ai_service import client, MODEL
+from app.services.ai_service import generate_with_retry
 
 
 def generate_resume_summary(parsed_resume: ParsedResume) -> str:
     prompt = f"""
-You are preparing a concise candidate profile for an AI interviewer.
-
-Summarize this resume into a maximum of 200 words.
-
-Include only:
-- Education
-- Core technical skills
-- Relevant experience
-- Major projects
-- Strong areas
-- Any notable achievements
-
-Do NOT copy everything.
-Remove unnecessary details.
-Return plain text only.
-
+Create a very short candidate summary for an AI interviewer.
+Max 80 words.
+Include only: education, strongest skills, major projects, and experience level if present.
+Do not write paragraphs.
 Resume:
-
-Name:
-{parsed_resume.name}
-
-Education:
-{parsed_resume.education}
-
-Experience:
-{parsed_resume.experience}
-
-Skills:
-{parsed_resume.skills}
-
-Projects:
-{parsed_resume.projects}
+Name: {parsed_resume.name}
+Education: {parsed_resume.education}
+Experience: {parsed_resume.experience}
+Skills: {parsed_resume.skills}
+Projects: {parsed_resume.projects}
 """
 
-    response = client.models.generate_content(
-        model=MODEL,
-        contents=prompt,
-    )
-
-    if not response.text:
-        raise ValueError("Gemini returned an empty resume summary.")
-
-    return response.text.strip()
+    return generate_with_retry(prompt)

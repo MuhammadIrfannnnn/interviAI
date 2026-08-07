@@ -1,15 +1,93 @@
-from app.schemas.resume import ParsedResume
-from google import genai
-from app.core.config import settings
-from app.schemas.interview_evaluation import InterviewEvaluation
-from app.schemas.interview_decision import InterviewDecision
-from app.schemas.interview_plan import InterviewPlan
-from app.schemas.interview_state import InterviewState
 import json
-from app.schemas.interview_report import InterviewReport
+import logging
+import time
 
-client=genai.Client(api_key=settings.GEMINI_API_KEY)
-MODEL="gemini-3.5-flash"
+from google import genai
+from google.genai import types
+import httpx
+
+from app.core.config import settings
+from app.schemas.interview_decision import InterviewDecision
+from app.schemas.interview_evaluation import InterviewEvaluation
+from app.schemas.interview_plan import InterviewPlan
+from app.schemas.interview_report import InterviewReport
+from app.schemas.interview_state import InterviewState
+from app.schemas.resume import ParsedResume
+from app.schemas.interview_turn import InterviewTurn
+
+logger = logging.getLogger(__name__)
+
+client = genai.Client(api_key=settings.GEMINI_API_KEY)
+MODEL = "gemini-3.5-flash"
+
+
+def _compact_json(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+
+
+class GeminiServiceUnavailable(RuntimeError):
+    """Raised when Gemini is temporarily unavailable after retries."""
+
+    def __init__(self, message: str = "The AI interviewer is temporarily unavailable. Please try again in a moment."):
+        super().__init__(message)
+        self.message = message
+
+
+def _is_retryable_error(error: Exception) -> bool:
+    if isinstance(error, (TimeoutError, httpx.TimeoutException)):
+        return True
+
+    status_code = getattr(error, "code", None)
+    if isinstance(status_code, int) and status_code in {429, 500, 502, 503, 504}:
+        return True
+
+    status_text = str(getattr(error, "status", "") or "").lower()
+    error_text = str(error).lower()
+    if status_text in {"429", "500", "502", "503", "504"}:
+        return True
+    if "high demand" in error_text or "service unavailable" in error_text:
+        return True
+
+    return False
+
+
+def generate_with_retry(prompt: str, *, model: str = MODEL) -> str:
+    last_error: Exception | None = None
+
+    logger.info("MODEL: %s", model)
+    logger.info("PROMPT LENGTH: %s", len(prompt))
+    logger.info("PROMPT PREVIEW: %s", prompt[:400].replace("\n", " "))
+
+    for attempt in range(1, 4):
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt
+            )
+            response_text = getattr(response, "text", None)
+            if not response_text:
+                raise ValueError("Gemini returned an empty response")
+            return response_text.strip()
+        except Exception as error:
+            logger.warning("Gemini request failed (attempt %s/3): %s", attempt, error)
+            last_error = error
+
+            should_retry = attempt < 3 and (
+                _is_retryable_error(error)
+                or "empty response" in str(error).lower()
+            )
+            if should_retry:
+                delay = 2 ** attempt
+                logger.warning(
+                    "Retrying Gemini request (attempt %s/3)...",
+                    attempt + 1,
+                )
+                time.sleep(delay)
+                continue
+
+            break
+
+    raise GeminiServiceUnavailable("The AI interviewer is temporarily unavailable. Please try again in a moment.") from last_error
 
 def parse_resume(text:str)->ParsedResume:
     prompt = f"""
@@ -38,14 +116,8 @@ Resume:
 
 {text}
 """
-    response=client.models.generate_content(
-        model=MODEL,
-        contents=prompt,
-    )
-    print("Gemini Response")
-    print(response.text)
-    print("------------------------------------------------------------")
-    response_text=response.text.strip()
+    response_text = generate_with_retry(prompt)
+    response_text = response_text.strip()
     if response_text.startswith("```json"):
         response_text=response_text.replace("```json","",1)
     if response_text.endswith("```"):
@@ -61,141 +133,98 @@ Resume:
     
 def generate_first_question(resume_summary:str,role_applied:str,difficulty:str):
     prompt = f"""
-You are a professional technical interviewer.
-
-Candidate Information:
-
-resume Summary:
-{resume_summary}
-
-Role Applied:
-{role_applied}
-
-Difficulty:
-{difficulty}
-
-Instructions:
-
-- Ask ONLY ONE interview question.
-- Make it personalized using the candidate's resume.
-- Don't ask generic questions.
-- Start with an introduction question or a project discussion.
-- Return ONLY the question.
+You are a technical interviewer.
+Ask ONE personalized interview question for this candidate.
+Resume summary: {resume_summary}
+Role: {role_applied}
+Difficulty: {difficulty}
+Return only the question.
 """
-    response=client.models.generate_content(
-        model=MODEL,
-        contents=prompt,
-    )
-    if not response.text:
-        raise ValueError("Gemini returned an empty response")
+    return generate_with_retry(prompt)
 
-    return response.text.strip()
-    
-def generate_next_question(resume_summary:str,role_applied:str,difficulty:str,conversation:str,plan:InterviewPlan):
+def generate_interview_turn(
+    resume_summary: str,
+    role_applied: str,
+    difficulty: str,
+    conversation: str,
+    state: InterviewState,
+) -> InterviewTurn:
+
     prompt = f"""
-You are an experienced interviewer.
+You are handling one interview turn.
 
-IMPORTANT:
+First evaluate the latest candidate answer.
 
-The interview planning has ALREADY been completed.
+Then decide the next action:
+- continue_topic
+- switch_topic
+- increase_difficulty
+- decrease_difficulty
+- end_interview
 
-You MUST follow the planner's decision.
+Then update the interview state.
 
-Do NOT decide what competency to assess next.
+Then write exactly ONE next interview question.
 
-Do NOT change topics unless instructed by the planner.
+Return ONLY valid JSON in this exact format:
 
-Your ONLY responsibility is writing the next interview question.
+{{
+  "evaluation": "short evaluation",
+  "action": "continue_topic",
+  "updated_state": {{ ... }},
+  "next_question": "question"
+}}
 
-------------------------------------------------------------
-CANDIDATE INFORMATION
-------------------------------------------------------------
-
-resume Summary:
+Resume Summary:
 {resume_summary}
 
-Role Applied:
+Role:
 {role_applied}
 
 Difficulty:
 {difficulty}
 
-------------------------------------------------------------
-PLANNER DECISION
-------------------------------------------------------------
-
-{plan.model_dump_json(indent=2)}
-
-------------------------------------------------------------
-INTERVIEW CONVERSATION
-------------------------------------------------------------
-
+Conversation:
 {conversation}
 
-------------------------------------------------------------
-QUESTION WRITING RULES
-------------------------------------------------------------
+Current Interview State:
+{_compact_json(state.model_dump())}
 
-1. Ask EXACTLY ONE interview question.
+For every competency level, you MUST use ONLY one of these values(case-sensitive):
 
-2. Follow the planner decision exactly.
+- Not Assessed
+- Weak
+- Average
+- Strong
 
-3. Follow the planner guidance.
 
-4. Never ignore the planner.
-
-5. If the planner selected "continue_topic",
-ask a meaningful follow-up that explores the topic further.
-
-6. If the planner selected "switch_topic",
-transition naturally before asking the next question.
-
-7. If the planner selected "increase_difficulty",
-make the next question noticeably more challenging.
-
-8. If the planner selected "decrease_difficulty",
-simplify the next question without sounding patronizing.
-
-9. Do NOT ask multiple questions.
-
-10. Do NOT repeat previous questions.
-
-11. Sound like an experienced human interviewer.
-
-12. The interview should feel conversational rather than scripted.
-
-13. If changing competency, use a smooth transition such as:
-
-"Let's switch gears slightly..."
-
-or
-
-"I'd like to move to another area..."
-
-14. Use the candidate's resume whenever appropriate to personalize the question.
-
-15. Avoid long questions.
-
-16. Do NOT explain your reasoning.
-
-17. Return ONLY the interview question.
-
-No markdown.
-
-No code fences.
-
-No explanations.
-
-Return ONLY the question.
+Rules:
+- Evaluate only the latest candidate answer.
+- Keep evaluation under 40 words.
+- Use the interview state as the source of truth.
+- Update only the competency discussed.
+- Do NOT invent new competencies.
+- Ask exactly one question.
+- Return ONLY valid JSON.
 """
-    response=client.models.generate_content(
-        model=MODEL,
-        contents=prompt,
-    )
-    if not response.text:
-        raise ValueError("Gemini returned an empty response")
 
-    return response.text.strip()
+    response_text = generate_with_retry(prompt).strip()
+
+    if response_text.startswith("```json"):
+        response_text = response_text.replace("```json", "", 1)
+
+    if response_text.endswith("```"):
+        response_text = response_text[:-3]
+
+    response_text = response_text.strip()
+
+    try:
+        data = json.loads(response_text)
+        return InterviewTurn(**data)
+
+    except json.JSONDecodeError:
+        print(response_text)
+        raise ValueError("Gemini did not return valid JSON")
 
 def evaluate_answer(resume_summary:str,role_applied:str,difficulty:str,conversation:str,candidate_answer:str):
     prompt = f"""
@@ -262,14 +291,8 @@ Confidence Score
 Estimate confidence based ONLY on the wording of the answer.
 Do NOT assume confidence from resume.
 """
-    response=client.models.generate_content(
-        model=MODEL,
-        contents=prompt,
-    )
-    print("Gemini Response")
-    print(response.text)
-    print("------------------------------------------------------------")
-    response_text=response.text.strip()
+    response_text = generate_with_retry(prompt)
+    response_text = response_text.strip()
     if response_text.startswith("```json"):
         response_text=response_text.replace("```json","",1)
     if response_text.endswith("```"):
@@ -333,14 +356,8 @@ Do NOT include triple backticks.
     "reason": str (Candidate demonstrated sufficient technical depth.)
 }}
 """
-    response=client.models.generate_content(
-        model=MODEL,
-        contents=prompt,
-    )
-    print("Gemini Response")
-    print(response.text)
-    print("------------------------------------------------------------")
-    response_text=response.text.strip()
+    response_text = generate_with_retry(prompt)
+    response_text = response_text.strip()
     if response_text.startswith("```json"):
         response_text=response_text.replace("```json","",1)
     if response_text.endswith("```"):
@@ -355,206 +372,7 @@ Do NOT include triple backticks.
         raise ValueError("Gemini did not return valid JSON")
     
 
-def plan_next_step(resume_summary:str,role_applied:str,difficulty:str,conversation:str,evaluations:str,state:InterviewState):
-    prompt = f"""
-You are an expert senior hiring manager responsible for PLANNING an interview.
 
-IMPORTANT:
-You are NOT the interviewer.
-You NEVER ask interview questions.
-You NEVER answer interview questions.
-
-Your ONLY responsibility is deciding what the interviewer should do next.
-
-------------------------------------------------------------
-CANDIDATE INFORMATION
-------------------------------------------------------------
-
-resume Summary: 
-{resume_summary}
-
-Role Applied:
-{role_applied}
-
-Difficulty:
-{difficulty}
-
-------------------------------------------------------------
-INTERVIEW CONVERSATION
-------------------------------------------------------------
-
-{conversation}
-
-------------------------------------------------------------
-EVALUATION HISTORY
-------------------------------------------------------------
-
-{evaluations}
-
-------------------------------------------------------------
-CURRENT INTERVIEW STATE
-------------------------------------------------------------
-
-{state.model_dump_json(indent=2)}
-
-------------------------------------------------------------
-YOUR OBJECTIVE
-------------------------------------------------------------
-
-Plan the remainder of the interview exactly as an experienced human interviewer would.
-
-Your goal is NOT to test only technical knowledge.
-
-Your goal is to collect enough evidence to evaluate the candidate across multiple dimensions before deciding whether to hire them.
-
-------------------------------------------------------------
-COMPETENCIES TO ASSESS
-------------------------------------------------------------
-
-Assess as many of these as appropriate for the candidate level.
-
-- Introduction
-- Resume Discussion
-- Projects
-- Technical Knowledge
-- Problem Solving
-- System Design (only if appropriate)
-- Behavioral
-- Communication
-- Teamwork
-- Leadership
-- Motivation
-- Career Goals
-
-------------------------------------------------------------
-PLANNING RULES
-------------------------------------------------------------
-
-1. Use Interview State as the PRIMARY source of truth.
-
-2. Use Conversation only for additional context.
-
-3. Use Evaluation History to understand strengths and weaknesses.
-
-4. Prefer discussing projects, experience and skills that actually exist in the candidate's resume.
-
-5. Never repeatedly ask about the same topic if it has already been sufficiently assessed.
-
-6. Normally ask at most 2-3 questions for a competency.
-
-7. If the candidate demonstrates STRONG understanding of a competency,
-move to another competency.
-
-8. If the candidate struggles after multiple attempts,
-stop insisting and move to another competency.
-
-9. Avoid making the interview feel repetitive.
-
-10. Mix technical and non-technical questions naturally.
-
-11. Ask behavioral questions naturally instead of treating them as a separate section.
-
-12. Only include System Design questions when the candidate level and role justify them.
-
-13. Adapt the interview according to:
-- Resume
-- Candidate performance
-- Difficulty
-- Role
-
-14. The interview should feel conversational, not like a scripted checklist.
-
-15. It is acceptable to revisit a previous competency later if new evidence is needed.
-
-16. End the interview ONLY after enough evidence has been collected across multiple competencies.
-
-17. Never end the interview after evaluating only one area.
-
-18. If the interview is already well balanced and sufficient evidence exists, choose "end_interview".
-
-------------------------------------------------------------
-AVAILABLE ACTIONS
-------------------------------------------------------------
-
-continue_topic
-switch_topic
-increase_difficulty
-decrease_difficulty
-end_interview
-
-------------------------------------------------------------
-AVAILABLE COMPETENCIES
-------------------------------------------------------------
-
-Introduction
-
-Resume
-
-Projects
-
-Technical
-
-Problem Solving
-
-System Design
-
-Behavioral
-
-Communication
-
-Teamwork
-
-Leadership
-
-Motivation
-
-Career Goals
-
-------------------------------------------------------------
-OUTPUT FORMAT
-------------------------------------------------------------
-
-Return ONLY valid JSON matching the InterviewPlan schema.
-
-Example:
-
-{{
-    "action": "switch_topic",
-    "next_competency": "Behavioral",
-    "topic": "Conflict Resolution",
-    "reason": "Technical competency has been sufficiently assessed and behavioral evidence is still missing.",
-    "guidance": "Ask a situational behavioral question about resolving disagreements within a team.",
-    "transition": "Let's move away from technical implementation and talk about teamwork."
-}}
-
-Do NOT return markdown.
-
-Do NOT return explanations.
-
-Do NOT return code fences.
-
-Return ONLY the JSON object.
-"""
-    response=client.models.generate_content(
-        model=MODEL,
-        contents=prompt,
-    )
-    print("Gemini Response")
-    print(response.text)
-    print("------------------------------------------------------------")
-    response_text=response.text.strip()
-    if response_text.startswith("```json"):
-        response_text=response_text.replace("```json","",1)
-    if response_text.endswith("```"):
-        response_text=response_text[:-3]
-    response_text=response_text.strip()
-    try:
-        data = json.loads(response_text)
-        return InterviewPlan(**data)
-
-    except json.JSONDecodeError:
-        print(response_text)
-        raise ValueError("Gemini did not return valid JSON")
     
 def update_interview_state(state:InterviewState,evaluation:str,conversation:str)->InterviewState:
     prompt=f"""
@@ -590,14 +408,8 @@ Rules:
 
 Return ONLY valid JSON matching the InterviewState schema.
 """
-    response=client.models.generate_content(
-        model=MODEL,
-        contents=prompt,
-    )
-    print("Gemini Response")
-    print(response.text)
-    print("------------------------------------------------------------")
-    response_text=response.text.strip()
+    response_text = generate_with_retry(prompt)
+    response_text = response_text.strip()
     if response_text.startswith("```json"):
         response_text=response_text.replace("```json","",1)
     if response_text.endswith("```"):
@@ -809,19 +621,8 @@ Do NOT include triple backticks.
 Return ONLY valid JSON.
 """
 
-    response = client.models.generate_content(
-        model=MODEL,
-        contents=prompt,
-    )
-
-    print("Gemini Response")
-    print(response.text)
-    print("------------------------------------------------------------")
-
-    if not response.text:
-        raise ValueError("Gemini returned an empty response.")
-
-    response_text = response.text.strip()
+    response_text = generate_with_retry(prompt)
+    response_text = response_text.strip()
 
     if response_text.startswith("```json"):
         response_text = response_text.replace("```json", "", 1)

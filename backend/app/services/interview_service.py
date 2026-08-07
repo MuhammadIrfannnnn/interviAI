@@ -5,7 +5,7 @@ from app.models.parsed_resume import ParsedResume as ParsedResumeModel
 from app.models.interview_session import InterviewSession
 from app.models.interview_message import InterviewMessage
 from app.models.parsed_resume import ParsedResume
-from app.services.ai_service import generate_final_report, generate_first_question,generate_next_question,evaluate_answer,plan_next_step,update_interview_state
+from app.services.ai_service import generate_final_report, generate_first_question, generate_interview_turn
 from fastapi import HTTPException, Path
 from app.schemas.interview import InterviewStart
 from app.schemas.interview_message import InterviewAnswer
@@ -79,42 +79,21 @@ def continue_interview(db:Session,current_user:User,interview:InterviewAnswer):
         recent_conversation += (
             f"{message.speaker}: {message.message}\n"
         )
-    evaluation_summary = ""
-    # evaluation=evaluate_answer(parsed_resume=parsed_resume,role_applied=session.role_applied,difficulty=session.difficulty,conversation=conversation,candidate_answer=interview.answer)
-    # evaluation_db = InterviewEvaluation(
-    # message_id=candidate_message.id,
-    # technical_score=evaluation.technical_score,
-    # communication_score=evaluation.communication_score,
-    # confidence_score=evaluation.confidence_score,
-    # correctness=evaluation.correctness,
-    # strengths=evaluation.strengths,
-    # weaknesses=evaluation.weaknesses,
-    # feedback=evaluation.feedback,
-    # )
-    # db.add(evaluation_db)
-    # db.commit()
-    # db.refresh(evaluation_db)
-    # evaluations = (db.query(InterviewEvaluation).join(InterviewMessage).filter(InterviewMessage.session_id == session.id).all())
-    # evaluation_summary = ""
-    # for eval_record in evaluations:
-    #     evaluation_summary += f"""
-    # Technical: {eval_record.technical_score}/10
-    # Communication: {eval_record.communication_score}/10
-    # Confidence: {eval_record.confidence_score}/10
-    # Correctness: {eval_record.correctness}
-    # Strengths:
-    # {", ".join(eval_record.strengths)}
-    # Weaknesses:
-    # {", ".join(eval_record.weaknesses)}
-    # Feedback: {eval_record.feedback}
-    # """
     state = InterviewState(**session.interview_state)
-    updated_state=update_interview_state(state=state,evaluation=evaluation_summary,conversation=recent_conversation)
+    turn = generate_interview_turn(
+        resume_summary=session.resume_summary,
+        role_applied=session.role_applied,
+        difficulty=session.difficulty,
+        conversation=recent_conversation,
+        state=state,
+    )
+    evaluation_summary = turn.evaluation
+    updated_state = turn.updated_state
     session.interview_state = updated_state.model_dump()
     db.commit()
     db.refresh(session)
-    plan=plan_next_step(resume_summary=session.resume_summary,role_applied=session.role_applied,difficulty=session.difficulty,conversation=recent_conversation,evaluations=evaluation_summary,state=updated_state)
-    if plan.action == "end_interview":
+
+    if turn.action == "end_interview":
     #     session.status = "completed"
     #     session.ended_at = datetime.utcnow()
     #     db.commit()
@@ -170,7 +149,7 @@ def continue_interview(db:Session,current_user:User,interview:InterviewAnswer):
     #     "reason": decision.reason,
     #     "evaluation": evaluation.model_dump()
     #     }
-    next_question=generate_next_question(resume_summary=session.resume_summary,role_applied=session.role_applied,difficulty=session.difficulty,conversation=recent_conversation,plan=plan)
+    next_question = turn.next_question
     ai_message=InterviewMessage(session_id=session.id,speaker="AI",message=next_question)
     db.add(ai_message)
     db.commit()
