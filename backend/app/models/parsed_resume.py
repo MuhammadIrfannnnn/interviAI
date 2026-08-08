@@ -1,5 +1,5 @@
 from app.database.base import Base
-from sqlalchemy import String, DateTime, ForeignKey,JSON
+from sqlalchemy import String, DateTime, ForeignKey,JSON, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 
@@ -16,3 +16,4 @@ class ParsedResume(Base):
     experience:Mapped[list]=mapped_column(JSON)
     created_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow)
     resume=relationship("Resume",back_populates="parsed_resume")
+    summary: Mapped[str | None] = mapped_column(Text)

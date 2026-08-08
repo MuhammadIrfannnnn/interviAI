@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from app.models.parsed_resume import ParsedResume
+from app.services.resume_summary import generate_resume_summary
 
 def save_parsed_resume(db:Session,resume_id:int,parsed_data:ParsedResume)->ParsedResume:
     parsed_resume = ParsedResume(
@@ -12,6 +13,10 @@ def save_parsed_resume(db:Session,resume_id:int,parsed_data:ParsedResume)->Parse
         projects=parsed_data.projects
     )
     db.add(parsed_resume)
+    db.flush()
+    
+    summary = generate_resume_summary(parsed_resume)
+    parsed_resume.summary = summary
     db.commit()
     db.refresh(parsed_resume)
 

@@ -15,7 +15,7 @@ from datetime import datetime
 from fastapi.responses import FileResponse
 from app.models.interview_report import InterviewReport
 from app.services.pdf_service import generate_interview_report_pdf
-from app.services.resume_summary import generate_resume_summary
+# from app.services.resume_summary import generate_resume_summary
 
 def start_interview(db:Session,current_user:User,interview:InterviewStart):
     resume=(db.query(Resume).filter(Resume.user_id==current_user.id).first())
@@ -24,7 +24,13 @@ def start_interview(db:Session,current_user:User,interview:InterviewStart):
     parsed_resume=(db.query(ParsedResumeModel).filter(ParsedResumeModel.resume_id==resume.id).first())
     if not parsed_resume:
         raise HTTPException(status_code=404,detail="parsed resume not found")
-    summary = generate_resume_summary(parsed_resume)
+    summary = parsed_resume.summary
+
+    if not summary:
+        raise HTTPException(
+            status_code=500,
+            detail="Resume summary is missing. Please re-parse the resume."
+        )
 
 
     session=InterviewSession(
