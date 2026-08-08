@@ -18,7 +18,7 @@ from app.schemas.interview_turn import InterviewTurn
 logger = logging.getLogger(__name__)
 
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
-MODEL = "gemini-3.5-flash"
+MODEL = "gemini-3.6-flash"
 
 
 def _compact_json(value: object) -> str:
