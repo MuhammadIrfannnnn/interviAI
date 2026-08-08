@@ -41,7 +41,11 @@ def start_interview(db:Session,current_user:User,interview:InterviewStart):
     db.commit()
     db.refresh(session)
 
-    first_question=generate_first_question(resume_summary=summary,role_applied=interview.role_applied,difficulty=interview.difficulty)
+    first_question = generate_first_question(
+    candidate_name=current_user.full_name,
+    role_applied=interview.role_applied,
+    difficulty=interview.difficulty
+)
     message=InterviewMessage(session_id=session.id,speaker="AI",message=first_question)
     db.add(message)
     db.commit()
