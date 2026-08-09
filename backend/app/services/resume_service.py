@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import fitz
 from app.models.user import User
 import uuid
@@ -32,7 +34,7 @@ def upload_resume(file: UploadFile, current_user: User, db: Session) -> Resume:
         existing_resume.file_name=file.filename
         existing_resume.file_path=str(file_path)
         existing_resume.extracted_text=text
-
+        existing_resume.updated_at = datetime.utcnow()
         parsed_resume = (db.query(ParsedResume).filter(ParsedResume.resume_id == existing_resume.id).first())
         if parsed_resume:
             parsed_resume.name = parsed_data.name
@@ -102,6 +104,7 @@ def get_resume(db: Session,current_user: User):
             "id": resume.id,
             "file_name": resume.file_name,
             "uploaded_at": resume.uploaded_at,
+            "updated_at": resume.updated_at,
             "file_path": resume.file_path,
         },
         "parsed_resume": (

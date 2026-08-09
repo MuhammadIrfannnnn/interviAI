@@ -2,6 +2,7 @@ export interface ResumeMeta {
   id: number;
   file_name: string;
   uploaded_at: string;
+  updated_at?: string;
   file_path: string;
 }
 

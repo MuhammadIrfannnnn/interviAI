@@ -75,10 +75,13 @@ export default function Resume() {
 
       // Parsing (via Gemini, per the backend) can take a moment. If the
       // upload response comes back before parsing finishes, parsed_resume
-      // may be incomplete — poll GET /resume/ briefly until it looks ready
-      // rather than rendering with holes or crashing on missing fields.
+      // (or even the resume metadata block) may be incomplete — poll
+      // GET /resume/ briefly until it looks ready rather than rendering
+      // with holes or crashing on missing fields.
       const looksParsed = (r: ResumeResponse) =>
-        !!r.parsed_resume?.name && Array.isArray(r.parsed_resume?.skills);
+        !!r.resume?.file_name &&
+        !!r.parsed_resume?.name &&
+        Array.isArray(r.parsed_resume?.skills);
 
       if (looksParsed(data)) {
         setResume(data);
@@ -199,9 +202,15 @@ export default function Resume() {
                       <FileText className="h-4 w-4 text-text-secondary" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-text-primary">{resume.resume.file_name}</p>
+                      <p className="text-sm font-medium text-text-primary">
+                        {resume.resume?.file_name || "—"}
+                      </p>
                       <p className="text-xs text-text-muted">
-                        Uploaded {formatDate(resume.resume.uploaded_at)}
+                        {resume.resume?.updated_at
+                          ? `Updated ${formatDate(resume.resume.updated_at)}`
+                          : resume.resume?.uploaded_at
+                          ? `Uploaded ${formatDate(resume.resume.uploaded_at)}`
+                          : "Upload date unavailable"}
                       </p>
                     </div>
                   </div>
