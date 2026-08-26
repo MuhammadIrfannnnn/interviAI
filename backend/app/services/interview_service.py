@@ -20,16 +20,16 @@ from app.services.pdf_service import generate_interview_report_pdf
 def start_interview(db:Session,current_user:User,interview:InterviewStart):
     resume=(db.query(Resume).filter(Resume.user_id==current_user.id).first())
     if not resume:
-        raise HTTPException(status_code=404,detail="resume not found")
+        raise HTTPException(status_code=404, detail="Please upload your resume before starting an interview.")
     parsed_resume=(db.query(ParsedResumeModel).filter(ParsedResumeModel.resume_id==resume.id).first())
     if not parsed_resume:
-        raise HTTPException(status_code=404,detail="parsed resume not found")
+        raise HTTPException(status_code=422, detail="Your resume hasn't been processed yet. Please wait or re-upload your resume.")
     summary = parsed_resume.summary
 
     if not summary:
         raise HTTPException(
-            status_code=500,
-            detail="Resume summary is missing. Please re-parse the resume."
+            status_code=422,
+            detail="Resume summary is missing. Please re-upload your resume."
         )
 
     first_question = generate_first_question(
@@ -73,9 +73,9 @@ def start_interview(db:Session,current_user:User,interview:InterviewStart):
 def continue_interview(db:Session,current_user:User,interview:InterviewAnswer):
     session=(db.query(InterviewSession).filter(InterviewSession.id==interview.session_id,InterviewSession.user_id==current_user.id).first())
     if not session:
-        raise HTTPException(status_code=404,detail="session not found")
+        raise HTTPException(status_code=404, detail="Interview session not found.")
     if session.status!="active":
-        raise HTTPException(status_code=400,detail="Interview has already ended")
+        raise HTTPException(status_code=400, detail="This interview has already ended.")
     candidate_message=InterviewMessage(session_id=session.id,speaker="candidate",message=interview.answer)
     db.add(candidate_message)
     db.commit()
@@ -348,9 +348,9 @@ def get_dashboard(
 def export_interview_report(session_id:int,current_user:User,db:Session):
     session=db.query(InterviewSession).filter(InterviewSession.id==session_id,InterviewSession.user_id==current_user.id).first()
     if not session:
-        raise HTTPException(status_code=402,detail="Session Not found")
+        raise HTTPException(status_code=404, detail="Interview session not found.")
     report = (db.query(InterviewReport).filter(InterviewReport.session_id == session.id,).first())
     if not report:
-        raise HTTPException(status_code=404,detail="Interview report not found")
+        raise HTTPException(status_code=404, detail="Interview report not found for this session.")
     pdf_path = generate_interview_report_pdf(session=session,report=report.report)
     return FileResponse(path=str(pdf_path),media_type="application/pdf",filename=f"Interview_Report_{session.id}.pdf")
