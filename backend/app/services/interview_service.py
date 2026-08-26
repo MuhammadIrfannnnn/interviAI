@@ -32,6 +32,14 @@ def start_interview(db:Session,current_user:User,interview:InterviewStart):
             detail="Resume summary is missing. Please re-parse the resume."
         )
 
+    first_question = generate_first_question(
+        candidate_name=current_user.full_name,
+        role_applied=interview.role_applied,
+        difficulty=interview.difficulty,
+    )
+
+    print("DEBUG: first question generated")
+
 
     session=InterviewSession(
         user_id=current_user.id,

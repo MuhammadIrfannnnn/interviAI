@@ -13,6 +13,7 @@ from app.utils.text import clean_resume_text
 from app.services.ai_service import parse_resume
 from app.models.parsed_resume import ParsedResume
 from app.services.parsed_resume_service import save_parsed_resume
+from app.services.resume_summary import generate_resume_summary
 UPLOAD_DIR = Path("uploads/resumes")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -36,6 +37,7 @@ def upload_resume(file: UploadFile, current_user: User, db: Session) -> Resume:
         existing_resume.extracted_text=text
         existing_resume.updated_at = datetime.utcnow()
         parsed_resume = (db.query(ParsedResume).filter(ParsedResume.resume_id == existing_resume.id).first())
+        summary = generate_resume_summary(parsed_data)
         if parsed_resume:
             parsed_resume.name = parsed_data.name
             parsed_resume.email = parsed_data.email
@@ -43,6 +45,7 @@ def upload_resume(file: UploadFile, current_user: User, db: Session) -> Resume:
             parsed_resume.projects = parsed_data.projects
             parsed_resume.experience = parsed_data.experience
             parsed_resume.education = parsed_data.education
+            parsed_resume.summary = summary
         else:
             save_parsed_resume(
                 db=db,

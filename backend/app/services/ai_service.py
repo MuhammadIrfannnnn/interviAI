@@ -131,7 +131,7 @@ Resume:
         print(response_text)
         raise ValueError("Gemini did not return valid JSON")
     
-def generate_first_question(candidate_name: str,role_applied:str,difficulty:str):
+def generate_first_question(candidate_name: str,role_applied:str,difficulty:str)->str:
     prompt = f"""You are interviewing {candidate_name} for {role_applied} (difficulty: {difficulty}).
 
 Output ONLY a short human-sounding greeting + ONE intro question asking the candidate to briefly introduce themselves and relate their background/interests to the role. No project or technical questions, no markdown, no extra text.

@@ -10,7 +10,8 @@ def save_parsed_resume(db:Session,resume_id:int,parsed_data:ParsedResume)->Parse
         skills=parsed_data.skills,
         education=parsed_data.education,
         experience=parsed_data.experience,
-        projects=parsed_data.projects
+        projects=parsed_data.projects,
+        summary=summary
     )
     db.add(parsed_resume)
     db.flush()
