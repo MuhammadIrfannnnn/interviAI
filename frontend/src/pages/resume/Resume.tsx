@@ -15,9 +15,12 @@ import { AxiosError } from "axios";
 import { AppLayout } from "../../layouts/AppLayout";
 import { Button } from "../../components/ui/Button";
 import { resumeService } from "../../services/resumeService";
+import { extractErrorMessage } from "../../utils/ExtractErrorMessage";
 import type { ResumeResponse } from "../../types/resume";
 
 type Status = "loading" | "empty" | "ready" | "uploading" | "error";
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -63,8 +66,18 @@ export default function Resume() {
   }, []);
 
   const handleFile = useCallback(async (file: File) => {
-    if (file.type !== "application/pdf") {
+    if (file.type !== "application/pdf" || !file.name.toLowerCase().endsWith(".pdf")) {
       setErrorMessage("Only PDF files are supported.");
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      setErrorMessage("File is too large. Maximum size is 5 MB.");
+      return;
+    }
+
+    if (file.size === 0) {
+      setErrorMessage("The selected file is empty.");
       return;
     }
 
@@ -103,8 +116,8 @@ export default function Resume() {
         return poll();
       };
       await poll();
-    } catch {
-      setErrorMessage("Upload failed. Try again.");
+    } catch (err) {
+      setErrorMessage(extractErrorMessage(err, "Upload failed. Try again."));
       setStatus(resume ? "ready" : "empty");
     }
   }, [resume]);
